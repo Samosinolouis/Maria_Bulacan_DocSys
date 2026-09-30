@@ -1,0 +1,315 @@
+================================================================================
+SANTA MARIA BULACAN DOCUMENT MANAGEMENT SYSTEM (DMS)
+Municipal Administrator's Office - Municipality of Santa Maria, Bulacan
+SCOPE OF THE PROJECT / FUNCTIONAL / NON-FUNCTIONAL REQUIREMENTS - FINAL
+================================================================================
+Companion document: schema.txt (18-table database schema)
+
+TECH STACK CONTEXT
+  - Keycloak ............ authentication only (OIDC); no passwords in app DB
+  - Shadow users ........ business DB mirrors Keycloak identities for fast,
+                          customized querying; authorization via roles
+  - Backblaze B2 ........ object storage for all uploaded files
+  - Virtual Machine ..... hosts application server + database (single node)
+  - Indexing ............ all tables indexed; inverted (full-text) index on
+                          documents for search
+================================================================================
+
+================================================================================
+1. SCOPE OF THE PROJECT
+================================================================================
+
+Project: A cloud-based Document Management System for the Municipal
+Administrator's Office digitizing the six-step document lifecycle
+(reception -> screening -> preparation -> review/approval -> transmission ->
+archiving) with RA 11032 SLA enforcement and a centralized meeting/event
+scheduling module.
+
+1.1 IN SCOPE
+
+  1.  Authentication & user management - Keycloak (OIDC) login; shadow user
+      records synced on login; role assignment; activation/deactivation.
+  2.  Role-based access control - permission model (Service:Action, wildcards)
+      enforced at the service layer.
+  3.  Document reception & intake - encoding of incoming requests, automatic
+      control-number generation, multi-file upload of scanned documents and
+      annexes, RA 11032 SLA deadline computation.
+  4.  Initial screening - pass/fail with grounds, return-for-compliance loop,
+      resubmission.
+  5.  Document preparation - output documents (EOs, endorsements,
+      certifications, permits, memos, legal opinions, response letters),
+      officer assignment, draft uploads, statutory template library,
+      submission for review.
+  6.  Review & approval - approve / endorse / deny with mandatory written
+      grounds; Mayor signature recording.
+  7.  Transmission - dispatch records (recipient, office, method, proof of
+      transmission upload).
+  8.  Completion & archiving - final signed copy upload, closing, permanent
+      read-only retrieval.
+  9.  Search & retrieval - full-text (inverted index) and metadata search;
+      filtering; inline PDF preview; download.
+  10. Dashboards & reports - workload metrics, SLA/overdue monitoring,
+      monthly/annual summaries per document category, export.
+  11. Audit trails - immutable per-module history (document_logs,
+      activity_logs) with actor snapshots.
+  12. Scheduling module - booking across the six municipal venues, conflict
+      detection, attendee tagging (Mayor/Administrator), mobile-browser
+      schedule viewing, reminders as in-app notifications.
+  13. In-app notifications - notification center with unread tracking and
+      deep links; NO email/SMS delivery in this release.
+  14. Hosting - single VM (application server + database); Backblaze B2 object
+      storage for files; daily off-site backups.
+
+1.2 OUT OF SCOPE
+
+  - Email/SMS notification delivery (in-app only; see Future Enhancements).
+  - Replacement of the physical logbook (system runs parallel to it).
+  - Cryptographic/PKI digital signatures - signature events are recorded;
+    documents are not e-signed.
+  - Scanner device integration - scanners produce files externally; the
+    system receives uploads only.
+  - Integration with external LGU systems (Sangguniang Bayan, Mayor's office
+    systems, national agency portals).
+  - Backlog digitization of historical records predating the system.
+  - Citizen-facing portal / online submission - internal system; requesting
+    parties are recorded as data.
+  - Native mobile applications - mobile support is browser-based and limited
+    to schedule checking.
+  - High-availability / multi-node deployment - single VM by design.
+  - Recurring event rules, RSVP tracking, external (non-user) attendees, and
+    venue capacity management in the scheduling module.
+
+1.3 FUTURE ENHANCEMENTS
+
+  FE-01  Email/SMS notification gateway via a notification_deliveries table
+         (notification_id, channel, status, sent_at, ...) fanning out from
+         notifications; the existing table stays the source of truth.
+  FE-02  Citizen-facing portal for online submission and status inquiry.
+  FE-03  Cryptographic (PKI-based) digital signatures in place of recorded
+         signature events.
+  FE-04  Bulk digitization tooling for historical archive backlogs.
+  FE-05  Automatic event creation from approved venue requests (soft
+         event.source_request_id linkage between modules).
+
+================================================================================
+2. FUNCTIONAL REQUIREMENTS
+================================================================================
+
+A. AUTHENTICATION & USER MANAGEMENT
+  FR-01  Users shall log in via Keycloak (OIDC); the system shall store no
+         local credentials.
+  FR-02  Shadow user records shall be keyed by the Keycloak OIDC "sub" claim
+         (users.id); created on first login and updated on subsequent logins
+         when the Keycloak profile changes.
+  FR-03  User deactivation shall be soft (is_active = false); user records
+         shall never be deleted once referenced by any record or log.
+  FR-04  Authorized administrators shall assign/deassign roles; each
+         assignment shall record who assigned it and when.
+  FR-05  Every service-layer action shall enforce its Service:Action
+         permission, computed as the union of the actor's roles'
+         permission_payload, supporting "Service:*" and "*:*" wildcards.
+  FR-06  Administrators shall manage users and roles and view any user's
+         effective permissions.
+
+B. DOCUMENT RECEPTION (STEP 1)
+  FR-07  Clerks shall encode incoming requests with type, subject, requesting
+         party, origin office, channel, and priority.
+  FR-08  The system shall issue unique sequential control numbers per type
+         prefix and year (e.g., TO-2026-0045) atomically - concurrent clerks
+         shall never collide or skip numbers.
+  FR-09  The system shall compute sla_deadline = received_at + 3 business
+         days, excluding weekends and holidays read from the holidays table
+         (RA 11032).
+  FR-10  Clerks shall upload scanned letters and annexes; accepted formats
+         whitelisted (PDF, DOCX, XLSX) up to a configured size limit; a
+         server-computed SHA-256 checksum and uploader identity shall be
+         recorded. The system shall NEVER generate attachment content.
+  FR-11  Reception shall automatically write a RECEIVED entry to
+         document_logs with the acting user and control number.
+
+C. INITIAL SCREENING (STEP 2)
+  FR-12  Clerks shall record a screening decision (pass/fail) against a
+         completeness checklist (attachments, addressing, signatures).
+  FR-13  On failure the request shall enter RETURNED_FOR_COMPLIANCE with the
+         specific deficiencies recorded.
+  FR-14  Clerks shall attach resubmitted files to a returned request,
+         returning it to screening.
+  FR-15  On pass the request shall advance to PREPARATION with an audit
+         entry.
+
+D. DOCUMENT PREPARATION (STEP 3)
+  FR-16  Officers (and clerks, for simple letters/permits/certifications)
+         shall create one or more output documents linked to a request;
+         standalone output documents (no request) shall be supported for
+         initiative issuances (EOs, memorandum orders).
+  FR-17  Each output document shall carry a category from document_types and
+         its own sequential control number.
+  FR-18  The system shall record the assigned drafting officer.
+  FR-19  Drafters shall upload draft files, versioned as DRAFT attachments;
+         drafts are authored externally (e.g., MS Word) and uploaded.
+  FR-20  The system shall provide a statutory template library, browsable by
+         category.
+  FR-21  Submitting a draft for review shall set the document to UNDER_REVIEW
+         and the request to REVIEW, with an audit entry.
+
+E. REVIEW & APPROVAL (STEP 4)
+  FR-22  Only roles holding review permissions (Municipal Administrator,
+         Executive Assistant II) shall see and act on the review queue.
+  FR-23  Approvers shall approve, endorse, or deny; denial shall REQUIRE
+         written grounds (mandatory field).
+  FR-24  Every decision shall record the decision-maker and timestamp;
+         denial grounds shall be displayed on the document dossier.
+  FR-25  The system shall record whether Mayor signature is required and
+         capture the signature event (signatory, date).
+
+F. TRANSMISSION (STEP 5)
+  FR-26  Clerks shall record transmission details - recipient name, receiving
+         office, received-by, method (pickup/courier/email), date-time - with
+         multiple transmissions allowed per document.
+  FR-27  Clerks shall upload proof of transmission (e.g., scanned signed
+         receiving copy) linked to the transmission record.
+  FR-28  Transmission shall set the request to TRANSMITTED with an audit
+         entry.
+
+G. COMPLETION & ARCHIVING (STEP 6)
+  FR-29  Clerks shall upload the final signed copy (SIGNED_FINAL attachment)
+         prior to closing.
+  FR-30  A request shall be closable from APPROVED, ENDORSED, DENIED, or
+         TRANSMITTED; denied requests may close directly without transmission.
+  FR-31  Closed records shall become read-only and permanently retrievable.
+
+H. SEARCH & RETRIEVAL
+  FR-32  The system shall provide full-text search over request/document
+         metadata (title, control number, requesting party, office) and
+         indexed document content via the inverted index.
+  FR-33  Results shall be filterable by type, category, status, date range,
+         and origin office.
+  FR-34  Users shall preview PDFs inline and download permitted files; file
+         access shall respect the same permission model.
+
+I. DASHBOARDS & REPORTS
+  FR-35  The dashboard shall display total documents, incoming requests,
+         pending actions, closed transactions, and SLA-at-risk/overdue counts.
+  FR-36  The system shall generate monthly and annual summary reports per
+         output category (Executive Orders, SB Endorsements, Contracts/
+         Agreements, Certifications, Permits, Memorandum Orders, Legal Advice,
+         Work Endorsements, Communication Letters).
+  FR-37  Reports shall be exportable to PDF and Excel.
+  FR-38  The system shall flag requests whose SLA deadline has passed or is
+         within a configurable warning window.
+
+J. AUDIT TRAILS
+  FR-39  Every state-changing operation shall write exactly one immutable
+         audit entry (actor snapshot, action type, timestamp, payload) in the
+         same database transaction as the change.
+  FR-40  document_logs and activity_logs shall be append-only, viewable per
+         request/document/event, and not editable or deletable through any
+         interface.
+
+K. SCHEDULING
+  FR-41  Authorized users shall create, edit, and cancel meetings/events
+         across the six municipal venues with role-based access; special-use
+         venues (Mayor's Conference Room, Administrator's Office) shall
+         require an elevated booking permission.
+  FR-42  The system shall detect and prevent booking conflicts: venue-time
+         overlap, required-attendee double-booking, and Mayor/Administrator
+         double-booking; cancelled events shall not block slots.
+  FR-43  Events shall support attendee tagging (system users) and
+         Mayor/Administrator involvement flags.
+  FR-44  Schedules shall be viewable via mobile browsers for authorized
+         users.
+  FR-45  Reminders shall be materialized as in-app notifications
+         (EVENT_REMINDER), generated idempotently per user and event for
+         events occurring within the next 24-48 hours.
+  FR-46  Event creation, modification, and cancellation shall be recorded in
+         activity_logs.
+
+L. NOTIFICATIONS
+  FR-47  The system shall generate in-app notifications for: drafts submitted
+         for review (to approvers), decisions recorded (to requesting-side
+         staff), event reminder/updated/cancelled (to attendees), and SLA
+         at-risk/overdue (to responsible staff).
+  FR-48  Users shall have a notification inbox showing unread count and
+         items newest-first.
+  FR-49  Users shall mark notifications as read individually or all at once.
+  FR-50  Notifications shall deep-link to their source entity (request,
+         document, or event).
+  FR-51  Notification delivery channels shall be in-app only in this release
+         (no email/SMS).
+
+================================================================================
+3. NON-FUNCTIONAL REQUIREMENTS
+================================================================================
+
+3.1 PERFORMANCE
+  NFR-01  Dashboard and queue pages shall load in <= 3 s (p95) under normal
+          office load.
+  NFR-02  Keyword search shall return in <= 2 s over a corpus of 100,000
+          documents via the inverted index.
+  NFR-03  The system shall support at least 50 concurrent authenticated users.
+  NFR-04  Foreign keys, status, control numbers, dates, and hot-path composites
+          (venue_id + event_date; user_id + created_at) shall be indexed;
+          document text shall carry the full-text/inverted index.
+
+3.2 SECURITY
+  NFR-05  All authentication shall be delegated to Keycloak (OIDC); no
+          passwords shall be stored in the application database.
+  NFR-06  All traffic shall be TLS-encrypted; B2 access shall use
+          application-scoped credentials server-side only, with downloads
+          delivered via short-lived presigned URLs.
+  NFR-07  Authorization shall be enforced server-side at the service layer;
+          client-side hiding of controls shall not be considered a security
+          control.
+  NFR-08  Every uploaded file shall have a server-computed SHA-256 checksum
+          stored for integrity verification.
+  NFR-09  document_logs and activity_logs shall be append-only at the database
+          grant level (no UPDATE/DELETE).
+  NFR-10  The system shall comply with RA 10173 (Data Privacy Act): role-scoped
+          visibility of personal data and a defined retention policy.
+  NFR-11  Sessions shall be governed by Keycloak policy (idle/absolute
+          timeouts, logout propagation).
+  NFR-12  User identity lifecycle: shadow users are keyed by the Keycloak
+          "sub" and deactivated, never deleted, preserving referential
+          history.
+
+3.3 RELIABILITY & BACKUP
+  NFR-13  Target availability of 99% during office hours (single-VM
+          deployment by design).
+  NFR-14  Database backups shall run at least daily with off-site copies in
+          B2; RPO <= 24 h, RTO <= 4 h.
+  NFR-15  File durability shall rely on B2 retention/versioning; checksum
+          reconciliation shall detect orphaned or corrupted objects.
+
+3.4 USABILITY & COMPLIANCE
+  NFR-16  The primary interface shall target desktop Windows workstations
+          (>= 1280 px); mobile browsers shall support schedule viewing only.
+  NFR-17  The interface shall follow DICT government web template compliance,
+          including proper RA 8491 heraldic usage.
+  NFR-18  All timestamps shall use Philippine Standard Time (RA 10535) and
+          display consistently.
+  NFR-19  The system shall support MS Word, Excel, and PDF formats and
+          printable official forms (routing slips, transmittals).
+  NFR-20  The system shall support modern evergreen browsers (current and
+          prior major version of Chrome, Edge, Firefox).
+
+3.5 MAINTAINABILITY
+  NFR-21  Permission strings shall be defined once as code constants and
+          validated on write (Service:Action, wildcards).
+  NFR-22  Database schema changes shall ship via versioned migrations; no
+          manual DDL in production.
+  NFR-23  The SLA holiday calendar shall be maintained as data (holidays
+          table), not hard-coded dates.
+  NFR-24  Module boundaries shall be enforced: no foreign key shall cross the
+          Document Module / Booking Module boundary; both shall share only the
+          platform group (users, roles, notifications).
+
+================================================================================
+4. TRACEABILITY MAP (requirements <-> schema groups in schema.txt)
+================================================================================
+  [A] SHARED PLATFORM ....... FR-01..06, FR-47..51 (auth, RBAC, notifications)
+  [B] DOCUMENT MODULE ....... FR-07..40 (six-step workflow, search, reports,
+                               audit trail)
+  [C] BOOKING MODULE ........ FR-41..46 (scheduling + activity_logs)
+  Security/reliability NFRs .. 05..15 map to Keycloak, B2, checksums, and the
+                               append-only grant model in schema.txt
+================================================================================
