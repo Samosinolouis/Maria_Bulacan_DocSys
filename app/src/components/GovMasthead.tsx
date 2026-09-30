@@ -2,15 +2,15 @@
 
 export default function GovMasthead() {
   return (
-    <div className="gov-masthead flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <span className="font-bold tracking-wider text-[#FCD116]">GOVPH</span>
-        <span className="text-[#94A3B8]">|</span>
-        <span className="text-[#E2E8F0]">
+    <div className="gov-masthead flex items-center justify-between gap-2 overflow-hidden">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <span className="font-bold tracking-wider text-[#FCD116] shrink-0">GOVPH</span>
+        <span className="text-[#94A3B8] shrink-0">|</span>
+        <span className="text-[#E2E8F0] text-[10px] sm:text-xs truncate">
           Republika ng Pilipinas - Pamahalaang Bayan ng Santa Maria, Lalawigan ng Bulacan
         </span>
       </div>
-      <div className="hidden md:flex items-center gap-4 text-[#94A3B8]">
+      <div className="hidden md:flex items-center gap-4 text-[#94A3B8] shrink-0">
         <span>Philippine Standard Time (PST): RA 10535</span>
         <span className="text-[#FCD116] font-mono font-semibold">GMT+8</span>
       </div>

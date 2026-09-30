@@ -18,43 +18,45 @@ export default function TransmitView() {
       </div>
 
       <div className="bg-white rounded border border-[#CBD5E1] p-4 shadow-sm">
-        <table className="municipal-docket-table">
-          <thead>
-            <tr>
-              <th>Control No.</th>
-              <th>Document Title</th>
-              <th>Dispatch Recipient</th>
-              <th>Receiving Department</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents
-              .filter((d) => d.status === 'APPROVED' || d.status === 'TRANSMITTED')
-              .map((doc) => (
-                <tr key={doc.id}>
-                  <td><span className="docket-control-badge">{doc.controlNumber}</span></td>
-                  <td><div className="font-semibold text-xs text-[#0F172A]">{doc.title}</div></td>
-                  <td>{doc.transmissionDetails?.recipientName || doc.requestingParty}</td>
-                  <td>{doc.transmissionDetails?.transmittedToOffice || doc.originOffice}</td>
-                  <td>
-                    {doc.status === 'APPROVED' ? (
-                      <button
-                        onClick={() => setSelectedDoc(doc)}
-                        className="btn-fluid px-2.5 py-1 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-semibold cursor-pointer shadow-sm"
-                      >
-                        Transmit Outgoing
-                      </button>
-                    ) : (
-                      <span className="font-mono text-[10px] font-bold text-[#15803D]">
-                        TRANSMITTED
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="municipal-docket-table">
+            <thead>
+              <tr>
+                <th>Control No.</th>
+                <th>Document Title</th>
+                <th>Dispatch Recipient</th>
+                <th>Receiving Department</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents
+                .filter((d) => d.status === 'APPROVED' || d.status === 'TRANSMITTED')
+                .map((doc) => (
+                  <tr key={doc.id}>
+                    <td><span className="docket-control-badge">{doc.controlNumber}</span></td>
+                    <td><div className="font-semibold text-xs text-[#0F172A]">{doc.title}</div></td>
+                    <td>{doc.transmissionDetails?.recipientName || doc.requestingParty}</td>
+                    <td>{doc.transmissionDetails?.transmittedToOffice || doc.originOffice}</td>
+                    <td>
+                      {doc.status === 'APPROVED' ? (
+                        <button
+                          onClick={() => setSelectedDoc(doc)}
+                          className="btn-fluid px-2.5 py-1 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-semibold cursor-pointer shadow-sm"
+                        >
+                          Transmit Outgoing
+                        </button>
+                      ) : (
+                        <span className="font-mono text-[10px] font-bold text-[#15803D]">
+                          TRANSMITTED
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

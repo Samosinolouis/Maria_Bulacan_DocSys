@@ -91,7 +91,7 @@ export default function EventModal({ existingEvents, onClose, onSubmit }: EventM
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto max-h-[80vh]">
           <div>
             <label className="block text-[11px] font-bold text-[#081E36] mb-1">
               Select Municipal Venue *

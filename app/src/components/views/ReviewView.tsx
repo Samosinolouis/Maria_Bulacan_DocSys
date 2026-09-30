@@ -8,7 +8,7 @@ export default function ReviewView() {
 
   return (
     <div className="space-y-4 animate-fluid-tab">
-      <div className="p-4 bg-white rounded border border-[#CBD5E1] flex items-center justify-between shadow-sm">
+      <div className="p-4 bg-white rounded border border-[#CBD5E1] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
         <div>
           <h3 className="font-cinzel text-base font-bold text-[#081E36]">
             MODULE D: EXECUTIVE SIGNATURE & ENDORSEMENT DESK
@@ -17,7 +17,7 @@ export default function ReviewView() {
             Authoritative queue for the Municipal Administrator and Mayor to approve, endorse, or return requests.
           </p>
         </div>
-        <span className="font-mono text-xs font-bold px-2 py-1 bg-[#FCD116] text-[#081E36] rounded">
+        <span className="font-mono text-xs font-bold px-2 py-1 bg-[#FCD116] text-[#081E36] rounded shrink-0">
           {reviewCount} Pending Review
         </span>
       </div>

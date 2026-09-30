@@ -12,10 +12,16 @@ import {
   Calendar,
   BarChart3,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const { incomingCount, reviewCount, overdueCount } = useApp();
 
@@ -121,9 +127,25 @@ export default function Sidebar() {
     },
   ];
 
-  return (
-    <aside className="w-full lg:w-72 bg-[#081E36] text-[#E2E8F0] shrink-0 border-r border-[#0B2545] p-3 flex flex-col justify-between">
+  const renderNavContent = (isMobile: boolean) => (
+    <>
       <div className="space-y-6">
+        {isMobile && (
+          <div className="flex items-center justify-between pb-3 border-b border-white/10 text-white">
+            <span className="font-cinzel text-xs font-bold tracking-wider">
+              MUNICIPAL NAVIGATION
+            </span>
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              aria-label="Close navigation menu"
+              className="p-1 rounded text-[#94A3B8] hover:text-white hover:bg-white/10 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
         {NAV_SECTIONS.map((section) => (
           <div key={section.roman} className="space-y-1">
             <div className="px-3 py-1 flex items-center justify-between text-[10px] font-bold tracking-widest text-[#94A3B8] border-b border-white/10 uppercase">
@@ -143,6 +165,11 @@ export default function Sidebar() {
                   <Link
                     key={item.id}
                     href={item.href}
+                    onClick={() => {
+                      if (isMobile && onCloseMobile) {
+                        onCloseMobile();
+                      }
+                    }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded text-left transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer relative ${
                       isActive
                         ? 'bg-[#0B2545] text-[#FFFFFF] font-bold shadow-inner'
@@ -188,6 +215,30 @@ export default function Sidebar() {
         <div className="font-semibold text-white">Santa Maria Civil Registry</div>
         <div className="font-mono text-[10px] mt-0.5 text-[#CBD5E1]">Session: Active Encrypted</div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden lg:flex w-72 bg-[#081E36] text-[#E2E8F0] shrink-0 border-r border-[#0B2545] p-3 flex-col justify-between">
+        {renderNavContent(false)}
+      </aside>
+
+      {/* Mobile / Tablet Drawer Overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fluid-fade"
+            onClick={onCloseMobile}
+          />
+          {/* Drawer Pane */}
+          <aside className="relative w-72 max-w-[85vw] bg-[#081E36] text-[#E2E8F0] shadow-2xl flex flex-col justify-between p-3 overflow-y-auto z-10 animate-fluid-tab">
+            {renderNavContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

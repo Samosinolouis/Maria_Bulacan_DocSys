@@ -121,9 +121,9 @@ export default function DocumentDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Formal Institutional Header */}
-        <div className="bg-[#081E36] text-white px-6 py-4 flex items-start justify-between border-b-2 border-[#15803D]">
+        <div className="bg-[#081E36] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-start justify-between border-b-2 border-[#15803D] gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="font-mono text-xs font-bold px-2 py-0.5 bg-[#15803D] text-white rounded">
                 {doc.controlNumber}
               </span>
@@ -139,22 +139,22 @@ export default function DocumentDetailModal({
                 </span>
               )}
             </div>
-            <h2 className="font-serif-docket text-lg md:text-xl font-bold text-white leading-snug">
+            <h2 className="font-serif-docket text-base sm:text-lg md:text-xl font-bold text-white leading-snug">
               {doc.title}
             </h2>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 bg-white/10 hover:bg-white/20 rounded text-[#CBD5E1] hover:text-white cursor-pointer"
+            className="p-1.5 bg-white/10 hover:bg-white/20 rounded text-[#CBD5E1] hover:text-white cursor-pointer shrink-0"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* 6-Step Statutory Lifecycle Tracker */}
-        <div className="bg-[#F8FAFC] px-6 py-3 border-b border-[#E2E8F0]">
-          <div className="flex items-center justify-between relative">
+        <div className="bg-[#F8FAFC] px-4 sm:px-6 py-3 border-b border-[#E2E8F0] overflow-x-auto">
+          <div className="flex items-center justify-between relative min-w-[480px]">
             {STEPS.map((step) => {
               const isPast = currentStepNum > step.num || doc.status === 'CLOSED';
               const isCurrent = currentStepNum === step.num && doc.status !== 'CLOSED';
@@ -185,7 +185,7 @@ export default function DocumentDetailModal({
         </div>
 
         {/* Sub-Navigation Tabs */}
-        <div className="flex border-b border-[#E2E8F0] bg-white px-6">
+        <div className="flex border-b border-[#E2E8F0] bg-white px-4 sm:px-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('details')}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 cursor-pointer ${

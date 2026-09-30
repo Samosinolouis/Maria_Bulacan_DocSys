@@ -173,10 +173,10 @@ export default function NewIntakeModal({ currentUser, onClose, onSubmit }: NewIn
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto max-h-[75vh]">
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-[#081E36] mb-1">
                     Document / Request Type *
@@ -226,7 +226,7 @@ export default function NewIntakeModal({ currentUser, onClose, onSubmit }: NewIn
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-[#081E36] mb-1">
                     Requesting Person / Signatory *

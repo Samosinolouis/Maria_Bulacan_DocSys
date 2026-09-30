@@ -9,7 +9,7 @@ export default function ScheduleView() {
 
   return (
     <div className="space-y-4 animate-fluid-tab">
-      <div className="p-4 bg-white rounded border border-[#CBD5E1] flex items-center justify-between shadow-sm">
+      <div className="p-4 bg-white rounded border border-[#CBD5E1] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
         <div>
           <h3 className="font-cinzel text-base font-bold text-[#081E36]">
             CENTRAL MUNICIPAL GAVEL & VENUE SCHEDULER
@@ -20,7 +20,7 @@ export default function ScheduleView() {
         </div>
         <button
           onClick={() => setNewEventOpen(true)}
-          className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow"
+          className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow shrink-0"
         >
           Schedule Venue
         </button>
