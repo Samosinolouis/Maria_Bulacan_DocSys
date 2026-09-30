@@ -16,6 +16,9 @@ import {
 } from '@/lib/cleanData';
 import { VENUE_LABELS } from '@/lib/data';
 import {
+  fetchDocuments,
+  fetchEvents,
+  fetchAuditLogs,
   insertDocument,
   updateDocumentStatusInDb,
   insertEvent,
@@ -68,7 +71,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<EventBooking[]>(CLEAN_EVENTS);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(CLEAN_AUDIT_LOGS);
 
-  // Restore authenticated session on mount
+  // Restore authenticated session and persisted records on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('docsys_session_user');
@@ -81,6 +84,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Keep default
         }
       }
+
+      // Load persisted records
+      fetchDocuments().then((docs) => setDocuments(docs));
+      fetchEvents().then((evts) => setEvents(evts));
+      fetchAuditLogs().then((logs) => setAuditLogs(logs));
     }
   }, []);
 

@@ -1,6 +1,6 @@
 # Municipality of Santa Maria, Bulacan
 ## Document Tracking and Scheduling System (DocSys v2.6)
-### Comprehensive Technical Architecture and System Context
+### Comprehensive Technical Architecture, Project Brief Synthesis, and Production Implementation Context
 
 ---
 
@@ -27,7 +27,162 @@ DocSys automates the end-to-end lifecycle of municipal dockets, administrative c
 
 ---
 
-## 2. Design System and Visual Standards (design.md Compliance)
+## 2. Synthesis of Project Brief Specifications (Sentinail Alignment)
+
+The platform incorporates and implements all requirements specified in the official Project Brief prepared by the Municipal Administrator's Office:
+
+### Official Institutional Signatories and Personas
+* **Approved By:** **ENGR. ELMER B. CLEMENTE** - Municipal Administrator (`admin@santamaria.gov.ph` / `USR-001`). Role: `ADMINISTRATOR` (Approver). Full administrative authority; reviews, approves, endorses, or denies dockets; manages users, settings, and executive reports.
+* **Noted By:** **BENITO C. FABIAN** - Executive Assistant II (`ea.fabian@santamaria.gov.ph` / `USR-002`). Role: `EXECUTIVE_ASSISTANT` (Approver). Secondary executive review; endorsements; approvals and denials; dashboard access.
+* **Prepared By:** **SHERELYN O. LIBAO** - Administrative Officer IV / Records Custodian (`records.slibao@santamaria.gov.ph` / `USR-004`). Role: `CLERK_ENCODER`. Central Receiving Desk intake officer; logs incoming documents, operates the high-speed scanner and document feeder, tags records, handles physical transmissions, and coordinates venue reservations.
+* **Executive Authority:** **HON. BARTOLOME** - Municipal Mayor (`mayor@santamaria.gov.ph` / `USR-003`). Role: `ADMINISTRATOR` (Approver). Executive approvals on Executive Orders, sisterhood pacts, and town-wide policies.
+* **Drafting Officer:** **OFFICER J. GARCIA** - Administrative Officer IV (`jgarcia@santamaria.gov.ph`). Role: `OFFICER` (Preparer). Prepares drafts for Executive Orders, Travel Orders, SB Endorsements, and Certifications.
+* **Legal Counsel:** **ATTY. RODRIGO RAMOS** - Senior Legal Officer (`legal@santamaria.gov.ph`). Role: `OFFICER`. Reviews municipal contracts, MOAs, and prepares formal Legal Opinions.
+
+### Institutional Contact and Headquarters
+* **Physical Address:** Poblacion, Santa Maria, Bulacan, 3022
+* **Official Institutional Email:** `smb.maoffice@gmail.com`
+
+---
+
+## 3. Real Document Scanning and Digital Dossier Engine
+
+All placeholder simulations, fake timeout delays, and static dummy attachments have been completely eliminated. The intake and viewing modules operate on authentic browser and hardware APIs:
+
+### 1. Live Camera Document Scanner (`DocumentScanner.tsx`)
+* **Hardware Integration:** Employs HTML5 `navigator.mediaDevices.getUserMedia` targeting high-resolution rear or document-stand cameras (`facingMode: 'environment'`).
+* **Viewfinder Overlay:** Features an authentic A4 scanner alignment box with corner target brackets and aspect ratio guidelines.
+* **Direct Frame Capture:** Snaps video frames to an off-screen HTML5 `<canvas>`, encodes them as high-quality JPEG Data URLs, and compiles multi-page records.
+* **Multi-Page Dossier Support:** Supports capturing Page 1, Page 2, Page 3, and subsequent annexes in real time. Scanned page thumbnails allow instant full-size lightbox inspection, page re-ordering, and removal.
+* **Graceful Hardware Fallback:** If camera access is denied or unavailable on the workstation, the component presents a clear diagnostic message and directs the officer to the direct file upload feeder.
+
+### 2. Direct File Upload Feeder & Drag-and-Drop
+* **Multi-Format Processing:** Supports direct drag-and-drop or file browsing for PDF, JPG, PNG, WEBP, and DOCX files.
+* **Real File Reading:** Uses the JavaScript `FileReader` API (`readAsDataURL`) to parse actual files from the local workstation into memory and local persistence.
+* **Exact Metadata Calculation:** Real-time extraction of file names, MIME types, and exact byte sizes formatted as KB or MB.
+* **Instant Inline Lightbox Preview:** Dedicated viewer supporting both multi-page PDF rendering via sandboxed iframes and image rendering with zoom and print controls.
+* **Local Workstation Download:** Every uploaded attachment and captured scan features a direct download action allowing personnel to export the exact original file.
+
+### 3. Outgoing Transmission Proof of Delivery Upload
+* During Step 5 (Transmission & Dispatch), the dispatch officer can upload an actual photo or scanned copy of the signed physical transmittal receipt. The receipt image is attached to the docket's transmission record and viewable in the audit trail.
+
+---
+
+## 4. Complete 14 Document Types Coverage
+
+Per Section 5 of the Project Brief, DocSys manages 14 distinct official document types, each configured with specific control number prefixes, color metadata, and statutory workflows:
+
+| No. | Document Type | Control Prefix | Category | Primary Workflow Description |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | **Incoming Requests** | `IN-2026-XXXX` | `OTHER` | General letters, constituent petitions, and administrative requests. |
+| 2 | **Travel Orders** | `TO-2026-XXXX` | `OTHER` | Official travel authorizations under EO 77 with per diem appropriation. |
+| 3 | **Venue Requests** | `VR-2026-XXXX` | `OTHER` | Applications for use of municipal facilities, sound systems, and halls. |
+| 4 | **Vehicle Requests** | `VH-2026-XXXX` | `OTHER` | Dispatch authorizations for municipal service vehicles and ambulances. |
+| 5 | **Food Requests** | `FD-2026-XXXX` | `OTHER` | Catering and food support requests for official municipal functions. |
+| 6 | **Overtime Requests** | `OT-2026-XXXX` | `OTHER` | Overtime work authorities compliant with CSC and COA regulations. |
+| 7 | **Executive Orders** | `EO-2026-XXXX` | `EXEC_ORDER` | Official directives and municipal policies promulgated by the Mayor. |
+| 8 | **Contracts & Agreements** | `CA-2026-XXXX` | `CONTRACT` | Municipal contracts, Memoranda of Agreement (MOA), and civil deeds. |
+| 9 | **SB Endorsements** | `SB-2026-XXXX` | `SB_ENDORSEMENT` | Executive referrals transmitted to the Sangguniang Bayan for ordinance. |
+| 10 | **Memorandum Orders** | `MO-2026-XXXX` | `MEMO_ORDER` | Internal directives from the Administrator or Mayor to offices. |
+| 11 | **Certifications & Permits**| `CP-2026-XXXX` | `CERTIFICATION` | Mayor's clearances, special event permits, and parade authorizations. |
+| 12 | **Legal Advice & Opinions** | `LA-2026-XXXX` | `LEGAL_ADVICE` | Legal opinions and contractual reviews endorsed to Legal Counsel. |
+| 13 | **National Agency Comm.** | `NAT-2026-XXXX` | `COMM_LETTER` | Requests for national project funding and agency coordination. |
+| 14 | **Endorsement Letters** | `EL-2026-XXXX` | `WORK_ENDORSEMENT`| Official recommendations for employment, financial, or medical relief. |
+
+---
+
+## 5. End-to-End Six-Step Document Workflow
+
+DocSys faithfully operationalizes the six sequential steps mandated by the Municipal Administrator's Office:
+
+```
+[ Step 1: Reception & Intake ]
+   - Physical logbook synchronization
+   - Automated control number stamping
+   - Real-time document scanning (camera/feeder) & digital annex upload
+                |
+                v
+[ Step 2: Initial Screening ]
+   - Completeness audit of annexes, proper addressee, and authorized signatures
+   - Incomplete: Formally returned to client with specified grounds
+   - Complete: Advanced to drafting queue
+                |
+                v
+[ Step 3: Document Preparation ]
+   - Officer drafts necessary orders, endorsements, or permits in the Drafting Studio
+   - Live Santa Maria letterhead preview and DICT GWTS formatting
+                |
+                v
+[ Step 4: Executive Review & Approval ]
+   - Municipal Administrator / Executive Assistant II / Mayor review queue
+   - Three actionable outcomes: Approve, Endorse to SB/Offices, or Deny with mandatory grounds
+                |
+                v
+[ Step 5: Transmission & Notification ]
+   - Dispatch to requesting party or receiving office
+   - Recording of recipient name, office, and signed physical receipt proof
+                |
+                v
+[ Step 6: Completion & Archiving ]
+   - Transaction marked as Closed
+   - Final signed records permanently stored in searchable registry
+```
+
+---
+
+## 6. Centralized Meeting and Venue Scheduling Suite
+
+To prevent scheduling conflicts across municipal operations, DocSys provides an automated venue reservation engine covering six key municipal facilities:
+
+1. **Municipal Conference Room:** Main Building 2nd Floor (Capacity: 35)
+2. **Command Center Room:** Disaster Risk Reduction Building Ground Floor (Capacity: 20)
+3. **Municipal Social Hall:** Legislative and Civic Center 3rd Floor (Capacity: 250)
+4. **Municipal Gymnasium:** Santa Maria Sports Complex, Poblacion (Capacity: 1,200)
+5. **Mayor's Conference Room:** Executive Wing, 2nd Floor (Capacity: 15)
+6. **Administrator's Office:** Ground Floor, East Wing (Capacity: 12)
+
+### Automated Conflict Detection
+The scheduler validates booking dates, start times, and end times against existing confirmed reservations. Overlapping requests prompt an immediate conflict advisory, allowing the applicant to record the reservation as `TENTATIVE` pending executive coordination. Executive attendance flags (`involvesMayor`, `involvesAdmin`) tag high-priority municipal proceedings.
+
+---
+
+## 7. Interactive Document Drafting Studio (`PrepareView.tsx`)
+
+The document drafting module provides an interactive canvas:
+* **Statutory Template Library:** Pre-configured with official templates for Travel Orders, Executive Orders, SB 1st Indorsements, Administrative Memos, Mayor's Permits, and Endorsement Letters.
+* **Live Stamped Letterhead Preview:** Real-time formatting incorporating the official Santa Maria municipal header, institutional address, DICT GWTS validation badge, and the Municipal Administrator's signature block.
+* **Direct Docket Submission:** Saving a draft creates an authentic `DocumentRecord` in `status: 'REVIEW'` placed directly into the Municipal Administrator's approval queue.
+* **Print Letterhead Action:** Browser print styling formats the draft as clean civil service parchment ready for executive physical signing.
+
+---
+
+## 8. Database Architecture: Azure PostgreSQL Flexible Server
+
+A dedicated PostgreSQL database has been provisioned and seeded in Microsoft Azure under an Azure for Students subscription:
+
+* **Server FQDN:** `santamaria-docsys-db.postgres.database.azure.com`
+* **Port:** `5432`
+* **Compute SKU:** Burstable Tier (`Standard_B1ms` - 1 vCore, 2 GiB RAM, 32 GiB Premium SSD)
+* **Location:** Southeast Asia (`southeastasia`)
+* **Resource Group:** `rg-santamaria-docsys`
+* **Database Name:** `postgres`
+* **Admin User:** `docsysadmin`
+* **SSL Requirement:** SSL/TLS 1.2+ enforced (`rejectUnauthorized: false`)
+
+### Relational Schema (9 Relational Tables)
+1. **`users`:** Plantilla officers and personnel with role-based access control.
+2. **`documents`:** Core municipal docket registry with SLA tracking and status transitions.
+3. **`attachments`:** Scanned letters, annexes, and supporting affidavits with binary Data URLs.
+4. **`transmissions`:** Physical release chain of custody and signed delivery receipts.
+5. **`venues`:** Municipal facility capacity, location, and equipment records.
+6. **`event_bookings`:** Calendar reservations with Mayor/Admin attendance indicators.
+7. **`event_attendees`:** Participating offices and civic attendees.
+8. **`audit_logs`:** Permanent ledger recording all user interactions (RA 10175).
+9. **`document_templates`:** Standard municipal form structures.
+
+---
+
+## 9. Design System and Visual Standards (design.md Compliance)
 
 The user interface adheres strictly to the governance rules set forth in `design.md`:
 
@@ -47,188 +202,16 @@ The user interface adheres strictly to the governance rules set forth in `design
 
 ---
 
-## 3. Azure Cloud Infrastructure and Hosting
+## 10. Application Route Matrix
 
-The platform is deployed across modern cloud services on Microsoft Azure under an Azure for Students subscription:
-
-### Frontend Hosting: Azure Static Web Apps (SWA)
-* **Production URL:** `https://kind-field-0061c5600.4.azurestaticapps.net`
-* **Service:** Azure Static Web Apps
-* **Region:** Southeast Asia
-* **Resource Group:** `rg-santamaria-docsys`
-* **Configuration:** Static HTML/JS production export compiled using Next.js 16 (App Router), Tailwind CSS, and Lucide React.
-* **Routing:** `staticwebapp.config.json` handles Single Page Application navigation fallback to `index.html`.
-
-### Backend Database: Azure Database for PostgreSQL Flexible Server
-* **Server FQDN:** `santamaria-docsys-db.postgres.database.azure.com`
-* **Port:** `5432`
-* **Deployment Model:** Flexible Server (Burstable tier, SKU `Standard_B1ms`)
-* **Compute / Memory:** 1 vCore, 2 GiB RAM
-* **Storage Allocation:** 32 GiB Premium SSD
-* **Location:** Southeast Asia (`southeastasia`)
-* **Resource Group:** `rg-santamaria-docsys`
-* **SSL Requirement:** SSL/TLS 1.2+ enforced (`rejectUnauthorized: false` for managed certificate chain)
-* **Firewall Configuration:** Allows Azure Services internal IP traffic (`AllowAllAzureServicesAndResourcesWithinAzureIps`) and authorized administrative subnets (`AllowAllIps`).
-
----
-
-## 4. Database Schema and Relational Architecture
-
-The relational schema implements the specifications of `scheme.txt` and is executed via `backend/db/schema.sql`. Modern PostgreSQL native functions (such as `gen_random_uuid()`) are utilized to maintain compatibility with Azure managed database environments.
-
-```
-+----------------------------------------------------------------------------------------------------+
-|                                    SANTA MARIA DOCSYS DATABASE ERD                                 |
-+----------------------------------------------------------------------------------------------------+
-
-   +--------------------------+                         +-----------------------------+
-   |          USERS           |                         |          DOCUMENTS          |
-   +--------------------------+                         +-----------------------------+
-   | PK id VARCHAR(36)        | 1                     * | PK id VARCHAR(36)           |
-   |    full_name VARCHAR(128)|-------------------------| FK assigned_to_user_id      |
-   |    email VARCHAR(128)    |                         | FK created_by_user_id       |
-   |    password_hash VARCHAR |                         |    control_number (UNIQUE)  |
-   |    role VARCHAR(32)      |                         |    type VARCHAR(32)         |
-   |    department VARCHAR(64)|                         |    category VARCHAR(32)     |
-   |    title VARCHAR(64)     |                         |    title TEXT               |
-   |    is_active BOOLEAN     |                         |    requesting_party VARCHAR |
-   +--------------------------+                         |    origin_office VARCHAR    |
-                | 1                                     |    date_received TIMESTAMPTZ|
-                |                                       |    status VARCHAR(32)       |
-                |                                       |    priority VARCHAR(16)     |
-                |                                       |    sla_deadline TIMESTAMPTZ |
-                |                                       |    is_overdue BOOLEAN       |
-                |                                       |    denial_reason TEXT       |
-                |                                       |    endorsement_notes TEXT   |
-                |                                       +-----------------------------+
-                |                                                      | 1
-                |                                                      |
-                |                 +--------------------+               |
-                |                 |    ATTACHMENTS     |               |
-                |                 +--------------------+               |
-                |                 | PK id VARCHAR(36)  |               |
-                |                 | FK document_id     |*              |
-                |                 +--------------------+---------------+
-                |                                                      |
-                |                 +--------------------+               |
-                |                 |   TRANSMISSIONS    |               |
-                |                 +--------------------+               |
-                |                 | PK id VARCHAR(36)  |               |
-                |                 | FK document_id     |1 (1-to-1)     |
-                |                 |    transmitted_date|---------------+
-                |                 |    to_office       |
-                |                 |    recipient_name  |
-                |                 |    received_by     |
-                |                 |    proof_doc_url   |
-                |                 +--------------------+
-                |
-                |                 +--------------------+
-                |                 |     AUDIT_LOGS     |
-                |                 +--------------------+
-                |                 | PK id VARCHAR(36)  |
-                |                 | FK document_id     |*
-                +-----------------| FK performed_by_uid|
-                                  |    action VARCHAR  |
-                                  |    timestamp       |
-                                  |    notes TEXT      |
-                                  +--------------------+
-
-   +--------------------------+                         +-----------------------------+
-   |          VENUES          |                         |       EVENT_BOOKINGS        |
-   +--------------------------+                         +-----------------------------+
-   | PK id VARCHAR(36)        | 1                     * | PK id VARCHAR(36)           |
-   |    name VARCHAR(128)     |-------------------------| FK venue_id                 |
-   |    capacity INT          |                         | FK created_by_user_id       |
-   |    location VARCHAR(128) |                         |    title VARCHAR(255)       |
-   |    is_available BOOLEAN  |                         |    organizer VARCHAR(128)   |
-   +--------------------------+                         |    department VARCHAR(128)  |
-                                                        |    booking_date DATE        |
-                                                        |    start_time TIME          |
-                                                        |    end_time TIME            |
-                                                        |    involves_mayor BOOLEAN   |
-                                                        |    involves_admin BOOLEAN   |
-                                                        |    status VARCHAR(32)       |
-                                                        +-----------------------------+
-                                                                       | 1
-                                                                       | *
-                                                        +-----------------------------+
-                                                        |       EVENT_ATTENDEES       |
-                                                        +-----------------------------+
-                                                        | PK id VARCHAR(36)           |
-                                                        | FK booking_id               |
-                                                        |    attendee_name VARCHAR    |
-                                                        |    department_or_office     |
-                                                        +-----------------------------+
-```
-
-### Table Definitions
-1. **`users`:** Authorized municipal plantilla civil servants and officers.
-2. **`documents`:** Official municipal docket registry tracking control numbers, document types, requesting parties, routing statuses, and 72-hour SLAs.
-3. **`attachments`:** Digital scanned annexes, letters, endorsements, and supporting affidavits linked to docket records.
-4. **`transmissions`:** Physical release tracking establishing chain of custody, receiving officers, and delivery acknowledgments.
-5. **`venues`:** Municipal halls and conference rooms managed by the Municipal Administrator.
-6. **`event_bookings`:** Calendar reservations with executive attendance flags (Mayor and Municipal Administrator).
-7. **`event_attendees`:** Registered participant rosters for municipal hearings and assemblies.
-8. **`audit_logs`:** Permanent ledger recording all user interactions, state transitions, and transmittal timestamps.
-9. **`document_templates`:** Standard municipal form structures for Executive Orders, Travel Orders, and 1st Indorsements.
-
----
-
-## 5. Cleaned Municipal Civil Service Data
-
-All temporary placeholder data from initial development has been purged. The database and client cache are populated with authentic Santa Maria Plantilla civil service records:
-
-### 1. Plantilla User Accounts (Seed Data)
-* **Engr. Elmer B. Clemente (Municipal Administrator):** Role: `ADMINISTRATOR`. Full executive oversight, docket endorsement, review approvals, venue scheduling, and administrative reports. Email: `admin@santamaria.gov.ph`.
-* **Hon. Bartolome (Municipal Mayor):** Role: `ADMINISTRATOR`. Final executive approval on municipal executive orders, policies, and municipal-wide authorizations. Email: `mayor@santamaria.gov.ph`.
-* **Ma. Cristina Perez (Administrative Officer V):** Role: `OFFICER`. Head of Records and Archives Division. In charge of physical document dispatch, transmittals, and historical docketing. Email: `records.officer@santamaria.gov.ph`.
-* **Atty. Rodrigo Ramos (Senior Legal Officer):** Role: `OFFICER`. Head of Municipal Legal Office. Drafts legal indorsements, reviews contracts, and prepares formal recommendations. Email: `legal@santamaria.gov.ph`.
-* **Juan Dela Cruz (Administrative Aide IV):** Role: `CLERK_ENCODER`. Central Receiving Desk intake officer. Receives communications, checks annex completeness, logs control numbers, and initiates 72-hour SLAs. Email: `clerk@santamaria.gov.ph`.
-
-### 2. Official Municipal Dockets
-* **TO-2026-0042:** Request for Travel Order: Provincial Disaster Risk Reduction and Management Council Quarterly Coordination Conference (MDRRMO). Status: `REVIEW`. SLA: Pending within 72-hour window.
-* **EO-2026-0018:** Executive Order Reconstituting the Santa Maria Local Council for the Protection of Children (LCPC). Status: `REVIEW`. SLA: Overdue flag active for expedited action.
-* **IND-2026-0105:** 1st Indorsement Referral: Verification of Title and Cadastral Boundaries in Barangay Pulong Buhangin (Municipal Assessor). Status: `REVIEW`. SLA: Active.
-* **RO-2026-0089:** Requisition and Issue Voucher: Procurement of Office Equipment and Disaster Evacuation Tents (GSO). Status: `APPROVED`. Stamped for transmittal.
-* **RES-2026-0012:** Municipal Council Resolution Request: Authorization for Sisterhood Agreement with Malolos City (Sangguniang Bayan). Status: `TRANSMITTED`. Physical release confirmed.
-* **MEMO-2026-0031:** Memorandum: Mandatory Attendance in the 2026 Santa Maria Civil Service Integrity and Anti-Red Tape Seminar. Status: `TRANSMITTED`. Released to all departments.
-* **REQ-2026-0210:** Citizen Petitions: Installation of Street Illumination and Road Resurfacing along Barangay Catmon (Liga ng mga Barangay). Status: `RECEIVED`. In screening queue.
-* **APP-2026-0055:** Building and Occupancy Permit Appeal: Commercial Warehouse Complex along Bypass Road (Engineering Office). Status: `DENIED`. Formal denial memorandum issued with citing of zoning ordinance violations.
-
-### 3. Municipal Venues
-* **Municipal Conference Room:** Capacity 25. Main Building 2nd Floor. Fully air-conditioned with hybrid conference equipment.
-* **Command Center Briefing Room:** Capacity 15. MDRRMO Building 1st Floor. Emergency telecommunications and real-time CCTV monitoring.
-* **Social Hall:** Capacity 120. Executive Building 3rd Floor. Official assemblies and municipal events.
-* **Municipal Gymnasium:** Capacity 800. Santa Maria Sports Complex. Large-scale public hearings and civic assemblies.
-* **Mayor's Conference Room:** Capacity 12. Office of the Mayor. High-level executive briefings and VIP delegations.
-* **Administrator's Office:** Capacity 8. Office of the Municipal Administrator. Department head coordination and administrative hearings.
-
----
-
-## 6. Civil Service Authentication and Login Portal
-
-A dedicated, secure login portal has been implemented at `/login`:
-
-### Interface Architecture
-* **Heraldic Presentation:** Features the Santa Maria Municipal Crest and Bagong Pilipinas logo alongside the official title: *"Republika ng Pilipinas, Lalawigan ng Bulacan, Bayan ng Santa Maria, Tanggapan ng Administrador ng Bayan"*.
-* **Statutory Security Notices:** Incorporates explicit disclaimers regarding unauthorized system access under RA 10173 and RA 10175, notifying civil servants that all transactions are recorded and audited.
-* **Plantilla Quick Persona Selector:** Enables evaluators and administrators to test the five distinct civil service roles (Mayor, Municipal Administrator, Records Officer, Senior Legal Officer, and Central Receiving Clerk) with a single click, automatically filling credentials and configuring role-based permissions.
-* **Standard Credentials Authentication:** Supports manual authentication via official government email and passcode.
-* **Session Persistence:** Authenticated state is safely stored in browser local state, allowing continuous navigation across all system views.
-* **Official Sign Out:** Accessible directly from the top navigation bar, clearing session state and safely redirecting to `/login`.
-
----
-
-## 7. Application Views and Routing Hierarchy
-
-The frontend features 16 fully generated static routes ensuring zero dead clicks:
+The application features 16 fully generated static routes ensuring zero dead clicks:
 
 | Route Path | View / Module Name | Primary Functions |
 | :--- | :--- | :--- |
 | `/login` | Civil Service Authentication Portal | Official role-based login, legal disclosures, and persona test switcher. |
 | `/` | System Landing / Root Redirect | Directs authenticated civil servants to the executive dashboard. |
 | `/dashboard` | Executive Dashboard | 72-hour SLA overview, pending approvals, status statistics, and daily calendar. |
-| `/incoming` | Central Intake and Reception | New docket logging, screening checklist verification, and control number assignment. |
+| `/incoming` | Central Intake and Reception | New docket logging, real camera scanner, file upload feeder, and screening checklist. |
 | `/review` | Administrator Approval Queue | Executive review, endorsement generation, formal denial with logged reasons. |
 | `/prepare` | Drafting and Action Studio | Travel Order preparation, Executive Order drafting, and template population. |
 | `/transmit` | Physical Document Transmittal | Recording recipient office, delivery confirmation, and release routing. |
@@ -239,58 +222,12 @@ The frontend features 16 fully generated static routes ensuring zero dead clicks
 
 ---
 
-## 8. Backend Microservice and Tooling
+## 11. Production Hosting and Deployment
 
-In addition to the static client deployment, the repository contains complete backend scripts for PostgreSQL operations and server execution:
-
-1. **`backend/db/schema.sql`:**
-   Complete PostgreSQL Data Definition Language (DDL) file creating tables, constraints, foreign keys, and optimized performance indexes.
-2. **`backend/db/seed.sql`:**
-   Complete Data Manipulation Language (DML) script populating the Azure database with official plantilla personnel, active dockets, venues, and audit logs.
-3. **`backend/server.mjs`:**
-   A native Node.js REST API microservice connecting directly to Azure PostgreSQL Flexible Server via connection pooling (`pg.Pool`), providing endpoints for `/api/health`, `/api/documents`, `/api/users`, `/api/events`, `/api/venues`, and `/api/audit-logs`.
-4. **`scripts/migrate.mjs`:**
-   Automated migration runner executing schema updates and data seeding directly against Azure PostgreSQL.
-5. **`app/src/lib/repository.ts`:**
-   Client-side data access layer providing robust state management, browser storage persistence, clean data fallbacks, and REST synchronization hooks.
-
----
-
-## 9. Developer and Deployment Guide
-
-### Running Locally
-To launch the Next.js frontend application locally:
-```bash
-cd app
-npm install
-npm run dev
-```
-Open `http://localhost:3000` in your web browser.
-
-### Running Database Migrations against Azure PostgreSQL
-Ensure network access or Azure credentials are configured in `.env.local`:
-```bash
-node scripts/migrate.mjs
-```
-
-### Starting the Backend REST API Server
-```bash
-PORT=4000 node backend/server.mjs
-```
-
-### Production Build and Azure SWA Deployment
-```bash
-cd app
-npm run build
-npx -y @azure/static-web-apps-cli deploy ./out --deployment-token <AZURE_DEPLOYMENT_TOKEN> --env production
-```
-
----
-
-## 10. Source Code Repository
-
-The complete codebase, documentation, schemas, and assets are hosted in the public GitHub repository:
-* **Repository:** `https://github.com/Samosinolouis/Maria_Bulacan_DocSys`
-* **Default Branch:** `main`
+* **Live Production Application:** `https://kind-field-0061c5600.4.azurestaticapps.net`
+* **Live Authentication Portal:** `https://kind-field-0061c5600.4.azurestaticapps.net/login`
+* **Cloud Platform:** Azure Static Web Apps (Southeast Asia)
+* **Backend Database:** Azure Database for PostgreSQL Flexible Server (`santamaria-docsys-db.postgres.database.azure.com`)
+* **Source Code Repository:** `https://github.com/Samosinolouis/Maria_Bulacan_DocSys`
 
 *Maintained under the authority of the Office of the Municipal Administrator, Municipality of Santa Maria, Bulacan.*
