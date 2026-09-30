@@ -1,0 +1,10 @@
+{
+  "name": "design-for-ai",
+  "version": "4.2.0",
+  "description": "A design-foundations system with a four-stage workflow (research → plan → mock → build). Design doctrine is loaded deterministically by Read() via a name→path resolver — six domains (content-design, behavioral, journey, deceptive-patterns, design-systems, ai-native) live as reference files in references/; two de-triggered skills (usability, data-viz) and two workflow skills (clarify, prototype) complete the plugin. The design-DNA pipeline grounds every candidate in two named references, then deals a seeded layout-first composition (scripts/dealer.mjs) — any axis user-pinnable — ahead of a criteria-bound critique and synthesis pass. Commands take any design idea from brief to viewable, gated artifact: research, plan, mock (sign-off gate), build (per-phase BUILD → REVIEW → commit). Review is dual-blind: an isolated cross-pillar critique and a deterministic detector (scripts/detect.mjs) gather findings independently and synthesize only after both finish.",
+  "author": {
+    "name": "r"
+  },
+  "license": "MIT",
+  "keywords": ["design", "typography", "color-theory", "visual-hierarchy", "composition", "usability", "ux-writing", "data-visualization", "dark-patterns", "behavioral-design", "user-journey", "design-systems", "ai-native", "agent-ux", "ui-design"]
+}

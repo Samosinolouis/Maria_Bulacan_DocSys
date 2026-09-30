@@ -1,0 +1,122 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code when working in this repository.
+
+## Repository Purpose
+
+A **design-foundations system**: a Claude Code plugin (v4.2.0) with a four-stage design workflow (`research → plan → mock → build`). Design doctrine is loaded deterministically by `Read()` — six doctrine domains live in `references/`, two de-triggered skills (`usability`, `data-viz`) plus two workflow skills (`clarify`, `prototype`) complete the plugin. The workflow takes any design idea from a vague brief to a viewable, gated artifact. The design-DNA pipeline (`references/visual/design-dna.md`) grounds every candidate in two named references, then a seeded dealer (`scripts/dealer.mjs`) deals its composition — the user may pin any axis before the deal — before a criteria-bound critique and synthesis pass; review is dual-blind, pairing an isolated cross-pillar critique with a deterministic detector (`scripts/detect.mjs`).
+
+## The Workflow (primary front door)
+
+The four commands form a `research → plan → mock → build` spine:
+
+| Command | What it does |
+|---------|-------------|
+| `/design-for-ai:research` | Facilitate the design brief — extract purpose, audience, brand feel, JTBD, device constraints, mood references, taste signals (future dealer pins). Writes a research doc to `.design-foundations/research/`. An optional verification pass (grill + cold read) flips the doc **draft → confirmed**. Chains to `plan`. |
+| `/design-for-ai:plan` | Turn the research doc into a phased design plan: clarify gaps, classify complexity, decompose into Discover/Design lifecycle stages, assign pillar skills per phase, set design done-when items (contrast/token/artifact/heuristic). Chains to `mock`. |
+| `/design-for-ai:mock` | Cheap checkpoint before the full build. Dispatches `design-build-agent` (renders a prototype via the `prototype` skill) and `design-review-agent` (dual-blind pixel critique — isolated cross-pillar LLM pass + `scripts/detect.mjs` deterministic pass, synthesized after both finish). Gates on user sign-off — approve to proceed to `build`, or loop back to `plan`. |
+| `/design-for-ai:build` | Full gated execution. Worktree isolation, per-phase `BUILD → REVIEW → commit` dispatching both agents, gate resolution (Full/Standard/Minimal), execution log, final trust report. Produces JOURNEY.md + DESIGN.md + tokens + final mocks. |
+
+Doctrine is loaded deterministically: each `build` phase's dispatched agents resolve doctrine names via the §5 resolver in `docs/pillar-taxonomy.md`, then `Read()` each file before executing the phase — "make it look good" becomes the review-agent reading every applicable doctrine file over the rendered mock, a workflow stage, not a trigger. A single LLM judgment pass structurally favors safe, on-pattern work, so review runs dual-blind: Assessment A is that cross-pillar doctrine read; Assessment B is `scripts/detect.mjs`, a deterministic non-LLM detector — both gather findings in isolation and synthesize only after both finish.
+
+### Dispatched agents
+
+| Agent | Role |
+|-------|------|
+| `agents/design-build-agent.md` | Produces one phase's design artifact (DESIGN.md tokens, JOURNEY.md spec, mock) honoring the DESIGN.md/JOURNEY.md gates; validates with design execution evidence (contrast via `palette.mjs`, mock renders via `prototype`, tokens applied) |
+| `agents/design-review-agent.md` | Independent, zero-intent-framing dual-blind review on the rendered pixels — Assessment A (triage → dispatch applicable pillars → cross-pillar critique) and Assessment B (`scripts/detect.mjs`, a deterministic AI-tell detector) run isolated, then synthesize ONE severity-ranked report |
+
+## Doctrine domains + skills (direct access)
+
+Design knowledge lives in two places: six doctrine reference files (loaded by `Read()`) and four skills (auto-discovered from `skills/`).
+
+### Doctrine reference files (`references/`)
+
+Loaded by commands and agents via the §5 resolver in `docs/pillar-taxonomy.md`. Not directly invocable — the workflow loads them per-phase.
+
+| Doctrine name | Concern |
+|--------------|---------|
+| `content-design` | The *words* as interface — UX writing, microcopy (error/empty/button/label), voice & tone, content-first |
+| `behavioral` | *Why* users act/return/convert — persuasion, the Fogg model, habit loops, Norman's emotional levels (honest mechanism) |
+| `journey` | How a user *moves through time* — JTBD, journey maps, IA/sitemaps, user/task flows, page specs, the persuasion spine; ships a JOURNEY.md companion |
+| `deceptive-patterns` | *Ethics of influence* — the dark-pattern ban-list; structural twin of `ai-tells` |
+| `design-systems` | A look → a *machine* that makes looks — semantic token tiers, atomic components, governance; extends DESIGN.md |
+| `ai-native` | Agent / LLM-interface design — agent UX, generative & non-deterministic UI, no-fixed-screen interfaces. Principle-derived — **no settled canon** |
+| `usability` *(de-triggered)* | Whether users can *operate* it — Nielsen 10, UX laws (Fitts/Hick/Miller…), affordances, cognitive load, UI patterns. The keystone other doctrine cites. Lives in `skills/usability/` (`user-invocable: false`) |
+| `data-viz` *(de-triggered)* | Encoding *data* truthfully — chart selection, data-ink/chartjunk, preattentive attributes, dashboards, chart accessibility. Lives in `skills/data-viz/` (`user-invocable: false`) |
+
+Visual doctrine (design DNA, surface, fonts, color, motion, interaction, responsive, audit, enhance, polish) lives in `references/visual/` and is resolved via the same §5 table. The DNA pipeline (`design-dna.md`) runs ground→diverge→critique→converge→gate: each of 5 candidates grounds in two named references, `scripts/dealer.mjs` deals its composition (seeded family + layout discipline + hue + signature; the user may pin any axis and the dealer deals the rest), a criteria-bound critique runs before any selection, and convergence offers synthesis-across-candidates, axis-level swaps on the pick, or one loop-back.
+
+### Skills (`skills/`)
+
+| Skill | Invocable | Concern |
+|-------|-----------|---------|
+| `prototype` | `user-invocable: true` | Generates self-contained HTML/CSS mocks from design tokens and page specs — outputs a viewable `.html` file |
+| `clarify` | `user-invocable: false` | Internal workflow clarification — decomposes underspecified design requests before work begins |
+| `usability` | `user-invocable: false` | Keystone doctrine — de-triggered; loaded via `Read()` |
+| `data-viz` | `user-invocable: false` | Data viz doctrine — de-triggered; loaded via `Read()` |
+
+### Conventions
+
+All doctrine files and skills obey the shared conventions in `docs/`:
+
+| Doc | Holds |
+|-----|-------|
+| `docs/foundations-standards.md` | Frontmatter shape (4 surviving skills), the ≤1024-char description rule, canonical reference-file shape, cite-the-principle, cite-down/acyclic dependency direction, the per-skill eval gate |
+| `docs/workflow-conventions.md` | The research→plan→mock→build lifecycle, DESIGN.md/JOURNEY.md artifact gates, design done-when vocabulary (contrast/token/heuristic), doctrine Read() dispatch conventions |
+| `docs/pillar-taxonomy.md` | The 8 doctrine domains, their single concern (SRP), "Not for X (use Y)" disambiguation, the cite-down dependency graph, and the §5 name→path resolver |
+
+The skill-authoring how-to (`references/skill-authoring-template.md`) is an authoring procedure, not a runtime-cited convention.
+
+## Structure
+
+```
+design-for-ai/
+├── .claude-plugin/
+│   └── plugin.json               # version 4.2.0 — doctrine-read workflow; skills auto-discovered (no `skills` array)
+├── commands/                     # the four workflow front doors (slash-invoked)
+│   ├── research.md               # extract the design brief
+│   ├── plan.md                   # decompose into phased design plan with doctrine assignments
+│   ├── mock.md                   # cheap prototype + dual-blind validation + sign-off gate
+│   └── build.md                  # full gated execution: BUILD → REVIEW → commit per phase
+├── agents/                       # dispatched by mock and build
+│   ├── design-build-agent.md     # produces one phase's design artifact; loads doctrine via Read()
+│   └── design-review-agent.md    # independent dual-blind review on the rendered pixels (cross-pillar critique + detect.mjs)
+├── docs/                         # shared conventions (runtime-cited by commands and agents)
+│   ├── foundations-standards.md  # skill authoring rules for the 4 surviving skills
+│   ├── workflow-conventions.md   # lifecycle, artifact gates, done-when vocab, doctrine dispatch
+│   └── pillar-taxonomy.md        # 8 doctrine domains + §5 name→path resolver (single source of truth)
+├── references/                   # doctrine files + authoring template
+│   ├── visual/                   # visual doctrine (design DNA, surface, fonts, color, etc.)
+│   │   ├── design-dna.md         # DNA-generation protocol + DESIGN.md template
+│   │   ├── chapter-01 through 09, appendix-fonts-and-typography.md
+│   │   ├── archetypes.md, foundations.md, checklists.md, techniques.md
+│   │   ├── libraries.md          # enhance-mode animation/3D library guide
+│   │   ├── surfaces.md           # device-class layout patterns + token deltas
+│   │   └── motion.md, interaction.md, responsive.md, ai-tells.md
+│   ├── ai-native/                # agent/LLM-interface doctrine
+│   ├── behavioral/               # persuasion + habit loop doctrine
+│   ├── content-design/           # UX writing + microcopy doctrine
+│   ├── deceptive-patterns/       # dark-pattern ban-list doctrine
+│   ├── design-systems/           # token tiers + component governance doctrine
+│   ├── journey/                  # JTBD + IA + flows + page specs doctrine
+│   └── skill-authoring-template.md  # authoring how-to for the 4 surviving skills
+├── scripts/
+│   ├── palette.mjs               # OKLCH token generator — WCAG contrast by construction
+│   ├── dealer.mjs                # seeded composition dealer — family + layout discipline + hue + signature per DNA candidate; --pin honors user-chosen axes
+│   └── detect.mjs                # deterministic AI-tell detector (ported subset, Apache-2.0 attributed) — Assessment B of dual-blind review
+└── skills/                       # 4 auto-discovered skills
+    ├── prototype/                # produces self-contained HTML/CSS mocks (user-invocable: true)
+    ├── clarify/                  # design-scoped clarification — internal workflow (user-invocable: false)
+    ├── usability/                # keystone doctrine — de-triggered (user-invocable: false)
+    └── data-viz/                 # data viz doctrine — de-triggered (user-invocable: false)
+```
+
+## Installation
+
+```bash
+/plugin marketplace add ryanthedev/rtd-claude-inn
+/plugin install design-for-ai@rtd
+```
+
+Version 4.0.0 converted design knowledge to a deterministic doctrine-read model — six doctrine reference files + two de-triggered skills replace the v3.1.0 eight auto-triggering pillar skills. Version 4.1.0 (Fable 5 refresh) sits on top of that model: the model ladder speaks fable/sonnet/haiku, the DNA pipeline grounds on dual references and deals composition via `scripts/dealer.mjs`, and review is dual-blind via `scripts/detect.mjs` — the public API (4 commands, 4 skills) is unchanged. Version 4.2.0 makes user choice first-class: research gains an optional verification pass (grill + cold read) and a taste-signals capture, the dealer accepts `--pin <axis>=<value>` (the dealer constrains the model, not the user), converge allows axis-level swaps on the picked candidate, and mock's sign-off gate gains a one-loop "Swap an axis" option. The install path is unchanged — workflow commands and agents are auto-discovered alongside the 4 surviving skills.
