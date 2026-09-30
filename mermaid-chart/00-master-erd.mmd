@@ -1,0 +1,130 @@
+erDiagram
+    USERS ||--o{ DOCUMENTS : "created_by (1:N)"
+    USERS |o--o{ DOCUMENTS : "assigned_to (0..1:N)"
+    USERS ||--o{ ATTACHMENTS : "uploaded_by (1:N)"
+    USERS ||--o{ EVENT_BOOKINGS : "booked_by (1:N)"
+    USERS ||--o{ AUDIT_LOGS : "performed_by (1:N)"
+
+    DOCUMENTS ||--o{ ATTACHMENTS : "contains (1:N)"
+    DOCUMENTS ||--o| TRANSMISSIONS : "dispatches (1:0..1)"
+    DOCUMENTS ||--o{ AUDIT_LOGS : "records_history (0..1:N)"
+
+    VENUES ||--o{ EVENT_BOOKINGS : "hosts (1:N)"
+    EVENT_BOOKINGS ||--o{ EVENT_ATTENDEES : "includes (1:N)"
+    EVENT_BOOKINGS ||--o{ AUDIT_LOGS : "records_event (0..1:N)"
+
+    USERS {
+        string id PK "UUID / Plantilla ID"
+        string full_name "Full civil service name"
+        string email UK "Official LGU email"
+        string password_hash "PBKDF2 security hash"
+        string role "MAYOR | MUNICIPAL_ADMIN | ADMIN_OFFICER_V | SENIOR_RECORDS_OFFICER | INTAKE_CLERK"
+        string department "LGU Department / Office"
+        string title "Plantilla Position Title"
+        boolean is_active "Active employment status"
+        timestamptz created_at "Account creation timestamp"
+        timestamptz updated_at "Last update timestamp"
+    }
+
+    DOCUMENTS {
+        string id PK "UUID"
+        string control_number UK "Docket No (SM-YYYY-MM-XXXX)"
+        string type "TRAVEL_ORDER | EXECUTIVE_ORDER | INDORSEMENT | VENUE_REQUEST | etc."
+        string category "ADMINISTRATIVE | LEGISLATIVE | EXECUTIVE | LEGAL | FINANCIAL | PERSONNEL | PUBLIC_AFFAIRS"
+        string title "Docket subject matter"
+        string requesting_party "Citizen or internal office"
+        string origin_office "Originating agency / department"
+        timestamptz date_received "Formal filing timestamp"
+        string assigned_to_user_id FK "Assigned desk officer"
+        string status "RECEIVED | SCREENING | PREPARATION | REVIEW | APPROVED | ENDORSED | DENIED | TRANSMITTED | CLOSED"
+        string priority "NORMAL | HIGH | URGENT"
+        timestamptz sla_deadline "RA 11032 statutory deadline"
+        boolean is_overdue "True if current time > sla_deadline"
+        text denial_reason "Reason if rejected"
+        text endorsement_notes "Notes or instructions"
+        string created_by_user_id FK "Intake officer UUID"
+        timestamptz created_at "Registration timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    ATTACHMENTS {
+        string id PK "UUID"
+        string document_id FK "Parent document UUID"
+        string file_name "Original document filename"
+        string file_url "Storage URL or data URI"
+        bigint file_size "Payload size in bytes"
+        string file_type "MIME type (PDF, PNG, etc.)"
+        string uploaded_by_user_id FK "Uploader user UUID"
+        timestamptz uploaded_at "Upload timestamp"
+    }
+
+    TRANSMISSIONS {
+        string id PK "UUID"
+        string document_id FK "Document UUID (1:1 Unique)"
+        timestamptz transmitted_date "Dispatch timestamp"
+        string transmitted_to_office "Target bureau / recipient office"
+        string recipient_name "Designated recipient officer"
+        string received_by "Actual receiving clerk name"
+        string proof_document_url "Scan of signed receiving copy"
+        string method "PHYSICAL_COURIER | IN_PERSON_PICKUP | OFFICIAL_EMAIL | PORTAL_DISPATCH"
+        text notes "Routing or delivery instructions"
+        timestamptz created_at "Record creation timestamp"
+    }
+
+    VENUES {
+        string id PK "Alphanumeric ID"
+        string code UK "Facility code"
+        string name "Venue display title"
+        string location "Physical address or wing"
+        int capacity "Seating capacity"
+        boolean is_active "Operational status"
+    }
+
+    EVENT_BOOKINGS {
+        string id PK "UUID"
+        string venue_id FK "Booked venue identifier"
+        string title "Event title / purpose"
+        string organizer "Organizing committee / department"
+        string department "Responsible LGU department"
+        date booking_date "Date of booking"
+        time start_time "Start time block"
+        time end_time "End time block"
+        boolean involves_mayor "Mayor attendance required"
+        boolean involves_admin "Admin attendance required"
+        string status "CONFIRMED | TENTATIVE | CANCELLED"
+        text notes "Logistics & equipment notes"
+        string created_by_user_id FK "Booking clerk UUID"
+        timestamptz created_at "Booking timestamp"
+        timestamptz updated_at "Last update timestamp"
+    }
+
+    EVENT_ATTENDEES {
+        string id PK "UUID"
+        string event_id FK "Parent event booking UUID"
+        string full_name "Dignitary or participant name"
+        string role_title "Designation or title"
+    }
+
+    AUDIT_LOGS {
+        string id PK "UUID"
+        string document_id FK "Document UUID (optional)"
+        string event_id FK "Event booking UUID (optional)"
+        string action "RECEIVED | SCREENED | PREPARED | REVIEWED | APPROVED | ENDORSED | DENIED | TRANSMITTED | ARCHIVED | SCHEDULED_EVENT | UPDATED"
+        string user_id FK "Actor user UUID"
+        string user_name "Actor full name snapshot"
+        string user_role "Actor role snapshot"
+        timestamptz timestamp "Audit event timestamp"
+        text details "Action audit narrative"
+        string hash_checksum "Cryptographic checksum SHA-256"
+    }
+
+    DOCUMENT_TEMPLATES {
+        string id PK "UUID"
+        string code UK "Unique template code"
+        string title "Official template title"
+        string category "Template classification"
+        text description "Usage guidelines"
+        jsonb template_body_schema "Form field schema"
+        boolean is_active "Template availability"
+        timestamptz created_at "Registration timestamp"
+    }

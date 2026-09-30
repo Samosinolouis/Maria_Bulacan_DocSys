@@ -1,0 +1,51 @@
+erDiagram
+    USERS ||--o{ DOCUMENTS : "creates / intakes (1:N created_by_user_id)"
+    USERS |o--o{ DOCUMENTS : "assigned_to / action_desk (0..1:N assigned_to_user_id)"
+    USERS ||--o{ ATTACHMENTS : "uploads (1:N uploaded_by_user_id)"
+    USERS ||--o{ EVENT_BOOKINGS : "schedules (1:N created_by_user_id)"
+    USERS ||--o{ AUDIT_LOGS : "executes_action (1:N user_id)"
+
+    USERS {
+        string id PK "Civil Service Plantilla ID (e.g. USER-001)"
+        string full_name "Full legal civil service name"
+        string email UK "Government email address"
+        string password_hash "PBKDF2 security hash"
+        string role "MAYOR | MUNICIPAL_ADMIN | ADMIN_OFFICER_V | SENIOR_RECORDS_OFFICER | INTAKE_CLERK"
+        string department "Office / Operating Unit"
+        string title "Official Plantilla Position"
+        boolean is_active "Employment status flag"
+        timestamptz created_at "Account creation timestamp"
+        timestamptz updated_at "Record update timestamp"
+    }
+
+    DOCUMENTS {
+        string id PK "Document UUID"
+        string control_number UK "Format: SM-YYYY-MM-XXXX"
+        string title "Docket subject matter"
+        string status "Workflow status state"
+        string assigned_to_user_id FK "Action officer UUID"
+        string created_by_user_id FK "Intake officer UUID"
+    }
+
+    ATTACHMENTS {
+        string id PK "Attachment UUID"
+        string document_id FK "Target document"
+        string file_name "Original document name"
+        string uploaded_by_user_id FK "Uploader user UUID"
+    }
+
+    EVENT_BOOKINGS {
+        string id PK "Booking UUID"
+        string title "Calendar event title"
+        date booking_date "Date of booking"
+        string created_by_user_id FK "Booking clerk UUID"
+    }
+
+    AUDIT_LOGS {
+        string id PK "Log UUID"
+        string action "Statutory action performed"
+        string user_id FK "Actor user UUID"
+        string user_name "Snapshot of actor name"
+        string user_role "Snapshot of actor role"
+        timestamptz timestamp "Tamper-evident timestamp"
+    }

@@ -1,0 +1,37 @@
+erDiagram
+    VENUES ||--o{ EVENT_BOOKINGS : "hosts / reserves (1:N)"
+    EVENT_BOOKINGS ||--o{ EVENT_ATTENDEES : "includes / invites (1:N)"
+
+    VENUES {
+        string id PK "Alphanumeric facility identifier"
+        string code UK "Facility code (e.g. GYM, CONF-A)"
+        string name "Venue display title"
+        string location "Physical wing or address"
+        int capacity "Maximum seating capacity"
+        boolean is_active "Operational status flag"
+    }
+
+    EVENT_BOOKINGS {
+        string id PK "UUID"
+        string venue_id FK "Venue identifier (ON DELETE RESTRICT)"
+        string title "Event title / docket purpose"
+        string organizer "Organizing committee or agency"
+        string department "Responsible LGU department"
+        date booking_date "Calendar date of engagement"
+        time start_time "Start time block (CHECK start < end)"
+        time end_time "End time block"
+        boolean involves_mayor "Flag: Mayor presence required"
+        boolean involves_admin "Flag: Municipal Admin presence required"
+        string status "CONFIRMED | TENTATIVE | CANCELLED"
+        text notes "Logistics, sound system, and seating notes"
+        string created_by_user_id FK "Booking scheduler UUID"
+        timestamptz created_at "Booking creation timestamp"
+        timestamptz updated_at "Record update timestamp"
+    }
+
+    EVENT_ATTENDEES {
+        string id PK "UUID"
+        string event_id FK "Parent event booking UUID (ON DELETE CASCADE)"
+        string full_name "Dignitary or participant full name"
+        string role_title "Designation, agency, or honorific"
+    }
