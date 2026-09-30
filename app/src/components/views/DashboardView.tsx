@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Search } from 'lucide-react';
+import { Search, Printer } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import {
   DOCUMENT_TYPE_LABELS,
@@ -24,6 +24,7 @@ export default function DashboardView() {
     setSearchQuery,
     setSelectedDoc,
     setRoutingSlipDoc,
+    setWordPreviewDoc,
     setNewEventOpen,
   } = useApp();
 
@@ -280,6 +281,13 @@ export default function DashboardView() {
                             className="btn-fluid px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer shadow-sm"
                           >
                             Examine
+                          </button>
+                          <button
+                            onClick={() => setWordPreviewDoc(doc)}
+                            className="btn-fluid px-2 py-1 bg-[#FCD116] hover:bg-[#FACC15] text-[#081E36] rounded text-xs font-bold cursor-pointer shadow-sm"
+                            title="Print Microsoft Word format document"
+                          >
+                            <Printer size={13} />
                           </button>
                           <button
                             onClick={() => setRoutingSlipDoc(doc)}

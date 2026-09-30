@@ -17,7 +17,7 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
 
   return (
     <div
-      className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-4 animate-fluid-fade"
+      className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-4 animate-fluid-fade modal-backdrop"
       onClick={onClose}
     >
       <div
@@ -25,7 +25,7 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Controls Header */}
-        <div className="bg-[#081E36] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#15803D]">
+        <div className="no-print bg-[#081E36] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#15803D]">
           <span className="font-bold text-xs uppercase tracking-wider text-white">
             Official Transmittal & Routing Slip - Printable Dossier
           </span>
@@ -47,7 +47,7 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
         </div>
 
         {/* Printable Physical Paper Substrate */}
-        <div className="p-8 overflow-y-auto flex-1 bg-white text-[#0F172A] font-serif-docket text-xs">
+        <div className="printable-routing-slip p-8 overflow-y-auto flex-1 bg-white text-[#0F172A] font-serif-docket text-xs">
           {/* Official Letterhead */}
           <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4">
             <div className="relative w-14 h-14 shrink-0">

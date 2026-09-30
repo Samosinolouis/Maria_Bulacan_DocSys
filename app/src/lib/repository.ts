@@ -15,6 +15,7 @@ import {
   AuditEntry,
   AuditAction,
   TransmissionRecord,
+  Attachment,
 } from './types';
 import {
   CLEAN_USERS,
@@ -134,6 +135,70 @@ export async function insertDocument(doc: DocumentRecord): Promise<void> {
       });
     } catch (e) {
       console.warn('[DocSys API] Sync insert failed:', e);
+    }
+  }
+}
+
+export async function attachDocumentToDocket(
+  docId: string,
+  attachment: Attachment,
+  user?: User
+): Promise<DocumentRecord | null> {
+  const current = getStoredItem<DocumentRecord[]>(STORAGE_KEYS.DOCUMENTS, CLEAN_DOCUMENTS);
+  const target = current.find((d) => d.id === docId);
+  if (!target) return null;
+
+  const updatedDoc: DocumentRecord = {
+    ...target,
+    attachments: [...(target.attachments || []), attachment],
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updated = current.map((d) => (d.id === docId ? updatedDoc : d));
+  setStoredItem(STORAGE_KEYS.DOCUMENTS, updated);
+
+  // Record audit entry
+  const newAudit: AuditEntry = {
+    id: `aud-${Date.now()}`,
+    documentId: docId,
+    action: 'ASSIGNED',
+    userId: user?.id || 'usr-clerk-05',
+    userName: user?.fullName || 'Sherelyn O. Libao',
+    userRole: user?.role || 'CLERK_ENCODER',
+    timestamp: new Date().toISOString(),
+    details: `Attached official annex/record: "${attachment.fileName}" (${attachment.fileSize}) to docket ${updatedDoc.controlNumber}`,
+  };
+  addAuditLogEntry(newAudit);
+
+  if (API_BASE) {
+    try {
+      await fetch(`${API_BASE}/api/documents/${docId}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attachment),
+      });
+    } catch (e) {
+      console.warn('[DocSys API] Sync attachment failed:', e);
+    }
+  }
+
+  return updatedDoc;
+}
+
+export async function updateDocumentRecord(doc: DocumentRecord): Promise<void> {
+  const current = getStoredItem<DocumentRecord[]>(STORAGE_KEYS.DOCUMENTS, CLEAN_DOCUMENTS);
+  const updated = current.map((d) => (d.id === doc.id ? doc : d));
+  setStoredItem(STORAGE_KEYS.DOCUMENTS, updated);
+
+  if (API_BASE) {
+    try {
+      await fetch(`${API_BASE}/api/documents/${doc.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc),
+      });
+    } catch (e) {
+      console.warn('[DocSys API] Sync update failed:', e);
     }
   }
 }

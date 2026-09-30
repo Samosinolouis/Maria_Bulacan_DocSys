@@ -7,6 +7,7 @@ import {
   EventBooking,
   User,
   AuditEntry,
+  Attachment,
 } from '@/lib/types';
 import {
   CLEAN_USERS,
@@ -23,6 +24,8 @@ import {
   updateDocumentStatusInDb,
   insertEvent,
   insertAuditLog,
+  attachDocumentToDocket,
+  updateDocumentRecord,
 } from '@/lib/repository';
 
 interface AppContextType {
@@ -46,6 +49,10 @@ interface AppContextType {
   setSelectedDoc: (doc: DocumentRecord | null) => void;
   routingSlipDoc: DocumentRecord | null;
   setRoutingSlipDoc: (doc: DocumentRecord | null) => void;
+  wordPreviewDoc: DocumentRecord | null;
+  setWordPreviewDoc: (doc: DocumentRecord | null) => void;
+  prepareTargetDocId: string | null;
+  setPrepareTargetDocId: (id: string | null) => void;
   newIntakeOpen: boolean;
   setNewIntakeOpen: (open: boolean) => void;
   newEventOpen: boolean;
@@ -60,6 +67,8 @@ interface AppContextType {
   handleUpdateStatus: (docId: string, newStatus: DocumentStatus, note?: string) => void;
   handleAddNewDocument: (newDoc: DocumentRecord) => void;
   handleAddNewEvent: (newEvent: EventBooking) => void;
+  handleAttachDocument: (docId: string, attachment: Attachment) => void;
+  handleUpdateDocument: (doc: DocumentRecord) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -107,9 +116,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // Modals
+  // Modals & Navigation
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
   const [routingSlipDoc, setRoutingSlipDoc] = useState<DocumentRecord | null>(null);
+  const [wordPreviewDoc, setWordPreviewDoc] = useState<DocumentRecord | null>(null);
+  const [prepareTargetDocId, setPrepareTargetDocId] = useState<string | null>(null);
   const [newIntakeOpen, setNewIntakeOpen] = useState(false);
   const [newEventOpen, setNewEventOpen] = useState(false);
 
@@ -243,6 +254,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNewEventOpen(false);
   };
 
+  const handleAttachDocument = (docId: string, attachment: Attachment) => {
+    setDocuments((prev) =>
+      prev.map((d) => {
+        if (d.id === docId) {
+          const updatedAttachments = [...(d.attachments || []), attachment];
+          return {
+            ...d,
+            attachments: updatedAttachments,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return d;
+      })
+    );
+
+    if (selectedDoc && selectedDoc.id === docId) {
+      setSelectedDoc((prev) =>
+        prev
+          ? {
+              ...prev,
+              attachments: [...(prev.attachments || []), attachment],
+              updatedAt: new Date().toISOString(),
+            }
+          : null
+      );
+    }
+
+    const newLog: AuditEntry = {
+      id: `AUD-${Date.now().toString().slice(-4)}`,
+      documentId: docId,
+      action: 'ASSIGNED',
+      userId: currentUser.id,
+      userName: currentUser.fullName,
+      userRole: currentUser.role,
+      timestamp: new Date().toISOString(),
+      details: `Attached official annex/record: "${attachment.fileName}" (${attachment.fileSize}) to docket.`,
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+
+    attachDocumentToDocket(docId, attachment, currentUser).catch((e) =>
+      console.warn('PostgreSQL attachment deferred:', e)
+    );
+  };
+
+  const handleUpdateDocument = (doc: DocumentRecord) => {
+    setDocuments((prev) => prev.map((d) => (d.id === doc.id ? doc : d)));
+    if (selectedDoc && selectedDoc.id === doc.id) {
+      setSelectedDoc(doc);
+    }
+    updateDocumentRecord(doc).catch((e) => console.warn('PostgreSQL doc update deferred:', e));
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -266,6 +329,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSelectedDoc,
         routingSlipDoc,
         setRoutingSlipDoc,
+        wordPreviewDoc,
+        setWordPreviewDoc,
+        prepareTargetDocId,
+        setPrepareTargetDocId,
         newIntakeOpen,
         setNewIntakeOpen,
         newEventOpen,
@@ -280,6 +347,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         handleUpdateStatus,
         handleAddNewDocument,
         handleAddNewEvent,
+        handleAttachDocument,
+        handleUpdateDocument,
       }}
     >
       {children}

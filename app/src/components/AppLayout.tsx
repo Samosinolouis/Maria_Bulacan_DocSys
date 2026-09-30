@@ -8,6 +8,7 @@ import Sidebar from '@/components/Sidebar';
 import GovFooter from '@/components/GovFooter';
 import DocumentDetailModal from '@/components/DocumentDetailModal';
 import RoutingSlipModal from '@/components/RoutingSlipModal';
+import OfficialWordDocument from '@/components/OfficialWordDocument';
 import NewIntakeModal from '@/components/NewIntakeModal';
 import EventModal from '@/components/EventModal';
 import { useApp } from '@/context/AppContext';
@@ -26,6 +27,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setSelectedDoc,
     routingSlipDoc,
     setRoutingSlipDoc,
+    wordPreviewDoc,
+    setWordPreviewDoc,
     handleUpdateStatus,
     handleAddNewDocument,
     handleAddNewEvent,
@@ -89,6 +92,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             document={routingSlipDoc}
             onClose={() => setRoutingSlipDoc(null)}
           />
+        )}
+
+        {wordPreviewDoc && (
+          <div
+            className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fluid-fade modal-backdrop"
+            onClick={() => setWordPreviewDoc(null)}
+          >
+            <div
+              className="w-full max-w-4xl max-h-[96vh] overflow-y-auto my-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <OfficialWordDocument
+                document={wordPreviewDoc}
+                onClose={() => setWordPreviewDoc(null)}
+                showToolbar={true}
+              />
+            </div>
+          </div>
         )}
 
         {newIntakeOpen && (

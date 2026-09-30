@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   X,
   CheckCircle2,
@@ -19,9 +20,25 @@ import {
   Camera,
   Maximize2,
   FileCheck,
+  Plus,
+  Trash2,
+  Paperclip,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { DocumentRecord, User, AuditEntry, DocumentStatus, Attachment } from '@/lib/types';
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_STATUS_META } from '@/lib/data';
+import { useApp } from '@/context/AppContext';
+import DocumentScanner from '@/components/DocumentScanner';
+import OfficialWordDocument from '@/components/OfficialWordDocument';
+
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
 
 interface DocumentDetailModalProps {
   document: DocumentRecord;
@@ -40,9 +57,30 @@ export default function DocumentDetailModal({
   onUpdateStatus,
   onPrintRoutingSlip,
 }: DocumentDetailModalProps) {
+  const router = useRouter();
+  const {
+    handleAttachDocument,
+    handleUpdateDocument,
+    setWordPreviewDoc,
+    setPrepareTargetDocId,
+    documents,
+  } = useApp();
+
   const [activeTab, setActiveTab] = useState<'details' | 'scans' | 'preview' | 'audit'>('details');
   const [activeScanPageIndex, setActiveScanPageIndex] = useState(0);
   const [viewingAttachment, setViewingAttachment] = useState<Attachment | null>(null);
+
+  // Attachment Drawer & Scanner Sub-modal State
+  const [attachModalOpen, setAttachModalOpen] = useState(false);
+  const [attachMode, setAttachMode] = useState<'upload' | 'scanner' | 'link'>('upload');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [uploadFileLabel, setUploadFileLabel] = useState('');
+  const [uploadFileDataUrl, setUploadFileDataUrl] = useState<string | null>(null);
+  const [uploadFileSize, setUploadFileSize] = useState('');
+  const [uploadFileType, setUploadFileType] = useState('');
+  const [linkDocId, setLinkDocId] = useState('');
+  const [attachSuccessMsg, setAttachSuccessMsg] = useState<string | null>(null);
 
   // Modals
   const [denialModalOpen, setDenialModalOpen] = useState(false);
@@ -70,6 +108,106 @@ export default function DocumentDetailModal({
       : doc.scannedFileUrl
       ? [doc.scannedFileUrl]
       : [];
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setUploadFileName(file.name);
+    setUploadFileSize(formatBytes(file.size));
+    setUploadFileType(file.type || 'application/octet-stream');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setUploadFileDataUrl(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveUploadAttachment = () => {
+    if (!uploadFileDataUrl) return;
+    const displayName = uploadFileLabel.trim()
+      ? `${uploadFileLabel.trim()} (${uploadFileName})`
+      : uploadFileName;
+    const newAttachment: Attachment = {
+      id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      fileName: displayName,
+      fileSize: uploadFileSize || 'Verified',
+      fileType: uploadFileType,
+      uploadedBy: currentUser.fullName,
+      uploadedAt: new Date().toISOString(),
+      fileDataUrl: uploadFileDataUrl,
+    };
+    handleAttachDocument(doc.id, newAttachment);
+    setAttachSuccessMsg(`Attached "${displayName}" to docket.`);
+    setTimeout(() => setAttachSuccessMsg(null), 3000);
+    setUploadFile(null);
+    setUploadFileName('');
+    setUploadFileLabel('');
+    setUploadFileDataUrl(null);
+    setAttachModalOpen(false);
+  };
+
+  const handleScannerAnnexesComplete = (pages: string[], scannerAttachments: Attachment[]) => {
+    if (pages.length > 0) {
+      pages.forEach((pageDataUrl, idx) => {
+        const newAttachment: Attachment = {
+          id: `att-scan-${Date.now()}-${idx}`,
+          fileName: `Scanned_Annex_Sheet_${(doc.attachments?.length || 0) + idx + 1}.jpg`,
+          fileSize: 'High Resolution Scan',
+          fileType: 'image/jpeg',
+          uploadedBy: currentUser.fullName,
+          uploadedAt: new Date().toISOString(),
+          fileDataUrl: pageDataUrl,
+        };
+        handleAttachDocument(doc.id, newAttachment);
+      });
+
+      const updatedScanned = [...(doc.scannedPages || []), ...pages];
+      handleUpdateDocument({
+        ...doc,
+        scannedPages: updatedScanned,
+      });
+
+      setAttachSuccessMsg(`Added ${pages.length} scanned page(s) as verified annexes.`);
+      setTimeout(() => setAttachSuccessMsg(null), 3000);
+      setAttachModalOpen(false);
+    }
+  };
+
+  const handleLinkExistingDocket = () => {
+    if (!linkDocId) return;
+    const target = documents.find((d) => d.id === linkDocId || d.controlNumber === linkDocId);
+    if (!target) return;
+    const linkAttachment: Attachment = {
+      id: `att-link-${Date.now()}`,
+      fileName: `Referenced Docket: ${target.controlNumber} - ${target.title}`,
+      fileSize: 'Registry Cross-Reference',
+      fileType: 'application/docket-reference',
+      uploadedBy: currentUser.fullName,
+      uploadedAt: new Date().toISOString(),
+      fileDataUrl: target.scannedFileUrl || undefined,
+    };
+    handleAttachDocument(doc.id, linkAttachment);
+    setAttachSuccessMsg(`Linked reference docket ${target.controlNumber}.`);
+    setTimeout(() => setAttachSuccessMsg(null), 3000);
+    setLinkDocId('');
+    setAttachModalOpen(false);
+  };
+
+  const handleDeleteAttachment = (attId: string) => {
+    if (!confirm('Are you sure you want to remove this attached record from the official docket?')) return;
+    const remaining = (doc.attachments || []).filter((a) => a.id !== attId);
+    handleUpdateDocument({
+      ...doc,
+      attachments: remaining,
+    });
+  };
+
+  const handleDraftInStudio = () => {
+    setPrepareTargetDocId(doc.id);
+    onClose();
+    router.push('/prepare');
+  };
 
   const handleApprove = () => {
     onUpdateStatus(
@@ -245,7 +383,7 @@ export default function DocumentDetailModal({
                 : 'border-transparent text-[#64748B] hover:text-[#081E36]'
             }`}
           >
-            Draft Letterhead Preview
+            Word Document Preview & Print
           </button>
           <button
             onClick={() => setActiveTab('audit')}
@@ -393,19 +531,42 @@ export default function DocumentDetailModal({
               )}
 
               {/* Real Attached Records & Scans */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
-                    Verified Digital Annexes & Uploaded Records ({doc.attachments?.length || 0})
-                  </h4>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
+                      Verified Digital Annexes & Uploaded Records ({doc.attachments?.length || 0})
+                    </h4>
+                    <span className="text-[10px] text-[#64748B]">
+                      Official supporting documents, citizen letters, and evidentiary annexes.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMode('upload');
+                      setAttachModalOpen(true);
+                    }}
+                    className="btn-fluid px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Plus size={14} />
+                    <span>Attach Document / Scan</span>
+                  </button>
                 </div>
+
+                {attachSuccessMsg && (
+                  <div className="p-2.5 bg-[#F0FDF4] border border-[#86EFAC] rounded text-xs text-[#166534] font-bold flex items-center gap-2 animate-fluid-fade">
+                    <CheckCircle2 size={15} />
+                    <span>{attachSuccessMsg}</span>
+                  </div>
+                )}
 
                 {doc.attachments && doc.attachments.length > 0 ? (
                   <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white text-xs">
                     {doc.attachments.map((att) => (
                       <div
                         key={att.id}
-                        className="p-3 flex items-center justify-between hover:bg-[#F8FAFC] transition-colors"
+                        className="p-3 flex items-center justify-between hover:bg-[#F8FAFC] transition-colors gap-2"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <FileText size={18} className="text-[#081E36] shrink-0" />
@@ -441,13 +602,36 @@ export default function DocumentDetailModal({
                               <Download size={14} />
                             </a>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAttachment(att.id)}
+                            className="btn-fluid p-1.5 border border-[#CBD5E1] hover:bg-[#FEE2E2] hover:text-[#991B1B] text-[#64748B] rounded cursor-pointer"
+                            title="Remove attached document"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-4 bg-[#F8FAFC] border border-[#CBD5E1] rounded text-center text-[#64748B] text-xs italic">
-                    No digital annexes attached to this docket.
+                  <div className="p-6 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-center space-y-2">
+                    <Paperclip size={28} className="mx-auto text-[#94A3B8]" />
+                    <div className="font-bold text-xs text-[#081E36]">No Supporting Documents Attached Yet</div>
+                    <p className="text-[11px] text-[#64748B] max-w-sm mx-auto">
+                      Attach citizen petitions, Sangguniang resolutions, endorsement letters, or capture physical documents via camera scan.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachMode('upload');
+                        setAttachModalOpen(true);
+                      }}
+                      className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm mt-1"
+                    >
+                      <Plus size={14} />
+                      <span>Attach Document or Camera Scan</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -516,52 +700,62 @@ export default function DocumentDetailModal({
                   </div>
                 </div>
               ) : (
-                <div className="p-8 text-center bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg space-y-2">
-                  <Camera size={32} className="mx-auto text-[#94A3B8]" />
-                  <div className="font-bold text-xs text-[#081E36]">No Physical Scans Found</div>
-                  <p className="text-[11px] text-[#64748B] max-w-sm mx-auto">
-                    This document was intaked electronically without physical page scans attached.
+                <div className="p-8 text-center bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg space-y-3">
+                  <Camera size={36} className="mx-auto text-[#94A3B8]" />
+                  <div className="font-bold text-sm text-[#081E36]">No Physical Scans Found</div>
+                  <p className="text-xs text-[#64748B] max-w-sm mx-auto">
+                    This document was intaked electronically without physical page scans attached. You can scan and attach physical paper pages using your camera or feeder.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMode('scanner');
+                      setAttachModalOpen(true);
+                    }}
+                    className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Camera size={14} />
+                    <span>Scan Physical Pages via Camera</span>
+                  </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 3: Draft Letterhead Preview */}
+          {/* TAB 3: Microsoft Word Executive Document Preview & Print */}
           {activeTab === 'preview' && (
-            <div className="p-6 bg-[#FAFAF9] border border-[#CBD5E1] rounded font-serif-docket shadow-inner">
-              <div className="text-center border-b-2 border-black pb-4 mb-4">
-                <div className="text-[10px] uppercase font-bold tracking-widest text-[#15803D]">
-                  Republika ng Pilipinas - Lalawigan ng Bulacan
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between no-print bg-[#F1F5F9] p-3 rounded-lg border border-[#CBD5E1] gap-2">
+                <div>
+                  <h4 className="font-bold text-xs text-[#081E36] uppercase tracking-wide">
+                    Microsoft Word Executive Issuance Layout
+                  </h4>
+                  <p className="text-[11px] text-[#64748B]">
+                    Formatted according to National Government Standards with dual heraldic seals, double header rule, justified provisions, and official signatory block.
+                  </p>
                 </div>
-                <div className="font-cinzel text-lg font-bold text-[#081E36]">
-                  BAYAN NG SANTA MARIA
-                </div>
-                <div className="text-xs font-bold text-[#0F172A]">
-                  TANGGAPAN NG ADMINISTRADOR NG BAYAN
-                </div>
-                <div className="text-[10px] text-[#64748B] italic">
-                  Poblacion, Santa Maria, Bulacan, 3022 | smb.maoffice@gmail.com
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDraftInStudio}
+                    className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] hover:bg-white text-[#081E36] rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <FileText size={13} />
+                    <span>Edit in Studio</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWordPreviewDoc(doc)}
+                    className="btn-fluid px-3.5 py-1.5 bg-[#FCD116] hover:bg-[#FACC15] text-[#081E36] rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Printer size={13} />
+                    <span>Print Word Document</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="my-4 font-mono text-[11px] space-y-1">
-                <div>CONTROL NO.: {doc.controlNumber}</div>
-                <div>DATE: {new Date(doc.dateReceived).toLocaleDateString()}</div>
-                <div>SUBJECT: {doc.title}</div>
-                <div>ORIGIN: {doc.originOffice}</div>
-              </div>
-
-              <div className="p-4 bg-white border border-[#E2E8F0] rounded whitespace-pre-wrap leading-relaxed text-xs">
-                {doc.draftContent ||
-                  'No draft response generated yet. Officer assigned will prepare draft order or endorsement.'}
-              </div>
-
-              <div className="mt-8 flex justify-end">
-                <div className="text-center w-64 border-t border-black pt-2">
-                  <div className="font-bold text-xs">ENGR. ELMER B. CLEMENTE</div>
-                  <div className="text-[11px] text-[#64748B]">Municipal Administrator</div>
-                </div>
+              <div className="overflow-x-auto p-2 sm:p-4 bg-[#E2E8F0] rounded-lg">
+                <OfficialWordDocument document={doc} showToolbar={false} />
               </div>
             </div>
           )}
@@ -591,14 +785,33 @@ export default function DocumentDetailModal({
         </div>
 
         {/* Operational Footer Bar with Direct Actions */}
-        <div className="bg-[#F8FAFC] border-t border-[#CBD5E1] px-6 py-3 flex items-center justify-between">
-          <button
-            onClick={() => onPrintRoutingSlip(doc)}
-            className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
-          >
-            <Printer size={14} />
-            <span>Official Routing Slip</span>
-          </button>
+        <div className="bg-[#F8FAFC] border-t border-[#CBD5E1] px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onPrintRoutingSlip(doc)}
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
+              title="Print 1-Page Official Transmittal & ARTA Routing Slip"
+            >
+              <Printer size={14} />
+              <span>Official Routing Slip</span>
+            </button>
+            <button
+              onClick={() => setWordPreviewDoc(doc)}
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#FCD116] hover:bg-[#FACC15] text-[#081E36] rounded text-xs font-bold cursor-pointer shadow-sm"
+              title="Print Document formatted in authentic Microsoft Word layout"
+            >
+              <Printer size={14} />
+              <span>Print Word Document</span>
+            </button>
+            <button
+              onClick={handleDraftInStudio}
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 border border-[#CBD5E1] hover:bg-[#F1F5F9] text-[#081E36] rounded text-xs font-bold cursor-pointer shadow-sm"
+              title="Draft or edit official Executive Order or Indorsement for this docket"
+            >
+              <FileText size={14} />
+              <span>Draft in Studio</span>
+            </button>
+          </div>
 
           <div className="flex items-center gap-2">
             {/* Step 2 Screening Pass */}
@@ -836,6 +1049,219 @@ export default function DocumentDetailModal({
               >
                 Log Physical Transmittal
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Attachment & Scanner Drawer Sub-Modal */}
+      {attachModalOpen && (
+        <div
+          className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fluid-fade"
+          onClick={() => setAttachModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-[#081E36] overflow-hidden animate-fluid-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sub-modal Header */}
+            <div className="bg-[#081E36] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#15803D]">
+              <div>
+                <span className="font-bold text-xs uppercase tracking-wider text-[#FCD116] block">
+                  Official Record Annexation
+                </span>
+                <h3 className="font-cinzel text-sm font-bold text-white">
+                  Attach Documents, Scans, or Annexes to {doc.controlNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAttachModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex border-b border-[#CBD5E1] bg-[#F1F5F9] px-5 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setAttachMode('upload')}
+                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
+                  attachMode === 'upload'
+                    ? 'border-[#15803D] text-[#15803D] bg-white'
+                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
+                }`}
+              >
+                <Upload size={13} />
+                <span>Upload File (Computer / Feeder)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttachMode('scanner')}
+                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
+                  attachMode === 'scanner'
+                    ? 'border-[#15803D] text-[#15803D] bg-white'
+                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
+                }`}
+              >
+                <Camera size={13} />
+                <span>Camera / Hardware Scanner</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttachMode('link')}
+                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
+                  attachMode === 'link'
+                    ? 'border-[#15803D] text-[#15803D] bg-white'
+                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
+                }`}
+              >
+                <LinkIcon size={13} />
+                <span>Cross-Reference Docket</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+              {/* MODE 1: FILE UPLOAD */}
+              {attachMode === 'upload' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
+                      Select File to Attach (PDF, Word DOCX/DOC, Images) *
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                      onChange={handleFileSelected}
+                      className="w-full text-xs text-[#081E36] file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#081E36] file:text-white hover:file:bg-[#0B2545] cursor-pointer border border-[#CBD5E1] rounded p-1.5 bg-[#F8FAFC]"
+                    />
+                  </div>
+
+                  {uploadFileName && (
+                    <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded flex items-center justify-between text-xs animate-fluid-fade">
+                      <div className="flex items-center gap-2">
+                        <FileText size={16} className="text-[#15803D]" />
+                        <div>
+                          <strong className="text-[#166534] block">{uploadFileName}</strong>
+                          <span className="text-[10px] text-[#15803D]">
+                            Size: {uploadFileSize} | Ready for official docket annexation
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase bg-[#DCFCE7] text-[#166534] px-2 py-0.5 rounded border border-[#86EFAC]">
+                        Selected
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
+                      Official Annex Description / Document Label (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={uploadFileLabel}
+                      onChange={(e) => setUploadFileLabel(e.target.value)}
+                      placeholder="e.g. Annex A - Certified Barangay Council Resolution"
+                      className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#15803D]"
+                    />
+                    <span className="text-[10px] text-[#64748B] mt-0.5 block">
+                      Helps executive reviewers immediately identify the attached record in the docket.
+                    </span>
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAttachModalOpen(false)}
+                      className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveUploadAttachment}
+                      disabled={!uploadFileDataUrl}
+                      className={`btn-fluid px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm inline-flex items-center gap-1.5 ${
+                        uploadFileDataUrl
+                          ? 'bg-[#15803D] hover:bg-[#166534] cursor-pointer'
+                          : 'bg-[#94A3B8] cursor-not-allowed opacity-60'
+                      }`}
+                    >
+                      <Plus size={14} />
+                      <span>Save and Attach to Docket</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODE 2: CAMERA / HARDWARE SCANNER */}
+              {attachMode === 'scanner' && (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-[#64748B]">
+                    Use your workstation camera or hardware scanner to digitize paper receipts, wet signatures, or citizen petitions directly into this docket.
+                  </p>
+                  <DocumentScanner
+                    currentUserFullName={currentUser.fullName}
+                    onScanComplete={handleScannerAnnexesComplete}
+                  />
+                </div>
+              )}
+
+              {/* MODE 3: CROSS-REFERENCE DOCKET */}
+              {attachMode === 'link' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
+                      Select Existing Docket to Cross-Reference *
+                    </label>
+                    <select
+                      value={linkDocId}
+                      onChange={(e) => setLinkDocId(e.target.value)}
+                      className="w-full p-2.5 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#15803D] text-xs bg-white"
+                    >
+                      <option value="">-- Choose an official docket from registry --</option>
+                      {documents
+                        .filter((d) => d.id !== doc.id)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.controlNumber} - {d.title} ({d.requestingParty})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded text-[#64748B] text-[11px] leading-relaxed">
+                    Cross-referencing attaches a formal reference link between this document and an existing docket in the municipal archives without duplicating physical storage.
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAttachModalOpen(false)}
+                      className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLinkExistingDocket}
+                      disabled={!linkDocId}
+                      className={`btn-fluid px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm inline-flex items-center gap-1.5 ${
+                        linkDocId
+                          ? 'bg-[#081E36] hover:bg-[#0B2545] cursor-pointer'
+                          : 'bg-[#94A3B8] cursor-not-allowed opacity-60'
+                      }`}
+                    >
+                      <LinkIcon size={14} />
+                      <span>Link as Reference Annex</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
