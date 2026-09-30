@@ -1,0 +1,373 @@
+@import "tailwindcss";
+
+:root {
+  /* Fonts */
+  --font-cinzel: 'Cinzel', Georgia, serif;
+  --font-serif: 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Layer 1 - National Identity (RA 8491 Flag Colors) */
+  --ph-blue: #0038A8;
+  --ph-red: #CE1126;
+  --ph-gold: #FCD116;
+  --ph-white: #FFFFFF;
+
+  /* Layer 2 - Santa Maria Emblem Palette (Sampled from BULACAN LOGO.png) */
+  --civic-primary: #15803D;         /* Bamboo Green (Seal Frame) */
+  --civic-primary-dark: #166534;    /* Letterhead Evergreen */
+  --civic-primary-darker: #081E36;  /* Bulacan Provincial Navy */
+  --civic-navy-deep: #0B2545;       /* Heraldic Midnight Navy */
+  --civic-accent: #081E36;          /* Formal Slate Navy Accent (No Orange) */
+  --civic-danger: #334155;          /* Dignified Charcoal Slate (No Red) */
+
+  /* Layer 3 - Slate Tinted Neutrals (WCAG AA / AAA) */
+  --neutral-50: #F8FAFC;
+  --neutral-100: #F1F5F9;
+  --neutral-200: #E2E8F0;
+  --neutral-300: #CBD5E1;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1E293B;
+  --neutral-900: #0F172A;
+
+  /* Status Colors (Clean, Normal, Dignified Civic) */
+  --status-received: #0B2545;
+  --status-screening: #0284C7;
+  --status-prep: #2563EB;
+  --status-review: #334155;
+  --status-approved: #15803D;
+  --status-endorsed: #0D9488;
+  --status-denied: #475569;
+  --status-transmitted: #0284C7;
+  --status-closed: #64748B;
+
+  /* Fluid Motion Tokens */
+  --ease-fluid: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--neutral-50);
+  color: var(--neutral-900);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Typography Utility Classes */
+.font-cinzel {
+  font-family: var(--font-cinzel), Georgia, serif;
+}
+
+.font-serif-docket {
+  font-family: var(--font-serif), Georgia, Cambria, 'Times New Roman', serif;
+}
+
+.font-mono-control {
+  font-family: var(--font-mono), ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Fluid Animation System (fluid deceleration and micro-springs) */
+@keyframes fluidSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fluidModalIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.975) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fluidFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-fluid-tab {
+  animation: fluidSlideUp 260ms var(--ease-fluid) forwards;
+}
+
+.animate-fluid-modal {
+  animation: fluidModalIn 280ms var(--ease-fluid) forwards;
+}
+
+.animate-fluid-fade {
+  animation: fluidFadeIn 200ms var(--ease-fluid) forwards;
+}
+
+/* Interactive Feedback with fluid easing */
+button, a, input, select, textarea {
+  transition: all 180ms var(--ease-fluid);
+}
+
+.btn-fluid {
+  transition: transform 180ms var(--ease-fluid), background-color 180ms var(--ease-fluid), box-shadow 180ms var(--ease-fluid);
+}
+
+.btn-fluid:hover {
+  transform: translateY(-1px);
+}
+
+.btn-fluid:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.card-fluid {
+  transition: transform 220ms var(--ease-fluid), box-shadow 220ms var(--ease-fluid), border-color 220ms var(--ease-fluid);
+}
+
+.card-fluid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(8, 30, 54, 0.06);
+}
+
+/* Focus States (WCAG 2.1 AA) */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--civic-primary);
+  outline-offset: 2px;
+}
+
+/* Top Trust Masthead */
+.gov-masthead {
+  background-color: #07192D;
+  border-bottom: 1px solid rgba(252, 209, 22, 0.25);
+  color: #E2E8F0;
+  font-size: 0.6875rem;
+  padding: 0.25rem 1.25rem;
+}
+
+/* Official Letterhead Header */
+.gov-header {
+  background-color: #FFFFFF;
+  border-bottom: 2px solid var(--civic-primary-dark);
+  box-shadow: 0 1px 3px rgba(8, 30, 54, 0.08);
+}
+
+/* Executive Operations Command Bar (Eliminates 4-card AI Quadrant syndrome) */
+.executive-operations-hud {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--civic-primary-darker);
+  border: 1px solid rgba(252, 209, 22, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(8, 30, 54, 0.16);
+  margin-bottom: 1.5rem;
+}
+
+.hud-cell {
+  padding: 1.125rem 1.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 0, 0, 0.12) 100%);
+}
+
+.hud-cell:last-child {
+  border-right: none;
+}
+
+.hud-section-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94A3B8;
+  margin-bottom: 0.35rem;
+}
+
+.hud-number-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.hud-number {
+  font-family: var(--font-mono), monospace;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #FFFFFF;
+}
+
+.hud-status-text {
+  font-size: 0.75rem;
+  color: #CBD5E1;
+  margin-top: 0.35rem;
+}
+
+/* Administrative Action Memorandum (Authoritative Civic Executive Docket - Zero Orange) */
+.arta-memo-docket {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-left: 5px solid #081E36;
+  border-radius: 8px;
+  padding: 1.125rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(8, 30, 54, 0.05);
+  transition: box-shadow 220ms var(--ease-fluid), border-color 220ms var(--ease-fluid);
+}
+
+.arta-memo-docket:hover {
+  box-shadow: 0 4px 14px rgba(8, 30, 54, 0.08);
+  border-color: #94A3B8;
+}
+
+/* Municipal Docket Ledger Table */
+.municipal-docket-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  background: #FFFFFF;
+}
+
+.municipal-docket-table th {
+  background: var(--civic-primary-darker);
+  color: #F8FAFC;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 2px solid var(--civic-primary);
+}
+
+.municipal-docket-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--neutral-200);
+  vertical-align: middle;
+}
+
+.municipal-docket-table tr {
+  transition: background-color 160ms var(--ease-fluid);
+}
+
+.municipal-docket-table tr:hover {
+  background-color: #F8FAFC;
+}
+
+/* Control Badges */
+.docket-control-badge {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  background: var(--civic-primary-darker);
+  color: #FFFFFF;
+  border-radius: 4px;
+  display: inline-block;
+  letter-spacing: 0.02em;
+}
+
+.docket-title-cell {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--neutral-900);
+  line-height: 1.35;
+}
+
+/* Status Badges - Clean Civic Hierarchy (No Harsh Orange or Red) */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-received {
+  background: #E2E8F0;
+  color: #0F172A;
+  border: 1px solid #CBD5E1;
+}
+
+.badge-screening {
+  background: #F1F5F9;
+  color: #0F172A;
+  border: 1px solid #CBD5E1;
+}
+
+.badge-preparation {
+  background: #EFF6FF;
+  color: #1E40AF;
+  border: 1px solid #BFDBFE;
+}
+
+.badge-review {
+  background: #F1F5F9;
+  color: #1E293B;
+  border: 1px solid #CBD5E1;
+}
+
+.badge-approved {
+  background: #DCFCE7;
+  color: #166534;
+  border: 1px solid #86EFAC;
+}
+
+.badge-endorsed {
+  background: #CCFBF1;
+  color: #115E59;
+  border: 1px solid #5EEAD4;
+}
+
+.badge-denied {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.badge-transmitted {
+  background: #E0F2FE;
+  color: #0369A1;
+  border: 1px solid #7DD3FC;
+}
+
+.badge-closed {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .executive-operations-hud {
+    grid-template-columns: 1fr;
+  }
+  .hud-cell {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .hud-cell:last-child {
+    border-bottom: none;
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/assets/*", "/favicon.ico", "/*.{png,jpg,jpeg,svg,ico,css,js}"]
+  },
+  "routes": [
+    {
+      "route": "/*",
+      "headers": {
+        "cache-control": "no-cache"
+      }
+    }
+  ]
+}
