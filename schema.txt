@@ -1,0 +1,322 @@
+================================================================================
+SANTA MARIA BULACAN DOCUMENT MANAGEMENT SYSTEM (DMS)
+Municipal Administrator's Office - Municipality of Santa Maria, Bulacan
+DATABASE SCHEMA - FINAL (18 TABLES)
+================================================================================
+
+GROUPS
+  [A] SHARED PLATFORM ......... identity & authorization, used by both modules
+  [B] DOCUMENT MODULE ......... 6-step workflow: reception -> archiving
+  [C] BOOKING MODULE .......... centralized scheduling of meetings & events
+
+CONVENTIONS
+  - users.id = Keycloak OIDC "sub" claim (UUID string). Authentication lives
+    entirely in Keycloak; the users table is the shadow record for fast,
+    customized querying and for authorization. FKs referencing users are UUIDs.
+  - Users are deactivated (is_active = false), never deleted - logs and records
+    reference them forever.
+  - Attachments are UPLOAD-ONLY. The system never generates file content.
+    Every upload records uploaded_by and a server-computed sha256 checksum.
+  - document_logs and activity_logs are APPEND-ONLY (no UPDATE/DELETE grants)
+    and store actor_name/actor_role snapshots so history survives renames.
+  - Notifications are IN-APP ONLY. Email/SMS is out of scope; if ever added,
+    a notification_deliveries table (notification_id, channel, ...) will fan
+    out from notifications without altering it.
+  - Cancellation/closure is always a STATUS change, never a row delete.
+  - All timestamps in Philippine Standard Time (UTC+8, RA 10535).
+  - Enum values are listed in comments; enforce via enum types or CHECK
+    constraints - never free strings.
+
+================================================================================
+[A] SHARED PLATFORM (4 TABLES)
+================================================================================
+
+TABLE users                          -- shadow of the Keycloak user
+- id                PK              -- = Keycloak OIDC "sub" (UUID); the join
+                                     --   key by definition - no separate column
+- first_name
+- middle_name       NULLABLE
+- last_name
+- suffix            NULLABLE        -- Jr., III, etc.
+- email             UNIQUE
+- contact_no
+- office                            -- e.g. "Office of the Municipal Administrator"
+- position                          -- e.g. "Administrative Officer IV"
+- is_active         DEFAULT true
+- created_at, updated_at
+
+TABLE roles
+- id                PK
+- name              UNIQUE          -- ADMINISTRATOR, EXECUTIVE_ASSISTANT,
+                                     --   OFFICER, CLERK_ENCODER
+- description
+- permission_payload JSON           -- ["RequestService:Encode", "DocumentService:*", "*:*"]
+                                     -- format ^[\w*]+:[\w*]+$
+                                     -- wildcards: "Service:*" and "*:*"
+- created_at
+
+TABLE user_roles                     -- join (users N --- M roles)
+- id                PK
+- user_id           FK -> users
+- role_id           FK -> roles
+- assigned_by       FK -> users     -- who granted the role (accountability)
+- assigned_at
+- UNIQUE (user_id, role_id)
+
+TABLE notifications                  -- system notifications (in-app only)
+- id                PK
+- user_id           FK -> users      -- recipient
+- type              ENUM              -- starter set, extend as features land:
+                                     --   EVENT_REMINDER, EVENT_UPDATED, EVENT_CANCELLED,
+                                     --   SUBMITTED_FOR_REVIEW, DECISION_RECORDED,
+                                     --   SLA_AT_RISK, SLA_OVERDUE
+- title                               -- headline shown in the notification bell/inbox
+- payload           JSON              -- context data for rendering
+- template                            -- body renderer over payload, same pattern
+                                     --   as document_logs / activity_logs
+- request_id        FK -> requests,  NULLABLE   \
+- document_id       FK -> documents, NULLABLE    >  source entity for click-through
+- event_id          FK -> events,    NULLABLE   /   deep links (nullable-trio pattern)
+- read_at                             -- NULL = unread
+- created_at
+- INDEX (user_id, created_at)         -- inbox listing + unread count
+-- Future (NOT built now): notification_deliveries (notification_id, channel,
+-- status, sent_at, ...) fans out to email/SMS. notifications stays the source
+-- of truth; delivery is an extension, not a schema change.
+
+================================================================================
+[B] DOCUMENT MODULE (10 TABLES)
+================================================================================
+
+TABLE request_types                  -- lookup: what came IN
+- id                PK
+- code              UNIQUE          -- TRAVEL_ORDER, VENUE_REQ, VEHICLE_REQ,
+                                     --   FOOD_REQ, OVERTIME_REQ, CLIENT_REQUEST
+- name                                -- display label
+- description
+- prefix                              -- IN, TO, VR, VH, FD, OT
+- is_active                           -- retire a type without breaking history
+
+TABLE document_types                 -- lookup: what goes OUT
+- id                PK
+- code              UNIQUE          -- EXEC_ORDER, SB_ENDORSEMENT, CONTRACT,
+                                     --   CERTIFICATION, PERMIT, MEMO_ORDER,
+                                     --   LEGAL_OPINION, WORK_ENDORSEMENT,
+                                     --   COMM_LETTER, RESPONSE_LETTER
+- name
+- description
+- prefix                              -- EO, SB, MO, LO, ...
+- is_active
+
+TABLE control_number_sequences       -- one row per (series, year)
+- id                PK
+- seq_code                           -- series discriminator, e.g.
+                                     --   REQ:TRAVEL_ORDER, DOC:EXEC_ORDER
+- year               INT
+- last_value         INT             -- last issued number in the series
+- UNIQUE (seq_code, year)
+-- Issue numbers with an atomic UPDATE ... RETURNING (row lock), so concurrent
+-- intake clerks can never collide or skip. control_no =
+-- <type prefix>-<year>-<zero-padded last_value>, e.g. TO-2026-0045.
+
+TABLE holidays                       -- lookup; feeds business-day SLA computation
+- id                PK
+- holiday_date      DATE UNIQUE      -- one row per date; admin encodes each
+                                     --   year's official proclamation list
+- name                               -- e.g. "Rizal Day"
+
+TABLE requests                       -- THE TRANSACTION. Owns the 6-step lifecycle.
+- id                PK
+- control_no        UNIQUE            -- from control_number_sequences
+- request_type_id   FK -> request_types
+- title                               -- subject matter
+- requesting_party                     -- person/signatory
+- origin_office                        -- department
+- channel                             -- WALK_IN / MAIL / COURIER / EMAIL
+- priority          ENUM              -- NORMAL / HIGH / URGENT
+- received_at                         -- IRL receipt date
+- sla_deadline                        -- received_at + 3 business days (RA 11032),
+                                        --   computed against holidays table
+- status            ENUM              -- RECEIVED -> SCREENING
+                                       --   -> [RETURNED_FOR_COMPLIANCE -> SCREENING]
+                                       --   -> PREPARATION -> REVIEW
+                                       --   -> APPROVED | ENDORSED | DENIED
+                                       --   -> TRANSMITTED -> CLOSED
+- created_by        FK -> users
+- created_at, updated_at
+- INDEX (status)                      -- queue filtering
+- INDEX (sla_deadline)                -- overdue / at-risk queries
+
+TABLE request_attachments
+- id                PK
+- request_id        FK -> requests
+- kind              ENUM              -- INCOMING_LETTER / ANNEX
+- storage_key                         -- B2 object key
+- bucket_name
+- original_name
+- mime_type                           -- whitelist: application/pdf, docx, xlsx
+- size_bytes
+- checksum                            -- sha256, tamper-evidence
+- uploaded_by       FK -> users       -- system NEVER generates; upload-only
+- created_at
+- INDEX (request_id)
+
+TABLE documents                      -- ONE OUTPUT ARTIFACT (0..N per request)
+- id                PK
+- request_id        FK -> requests, NULLABLE  -- NULL = issued without request
+                                                --   (sua sponte EO / MO)
+- control_no        UNIQUE            -- from control_number_sequences
+- document_type_id  FK -> document_types      -- the "category" reports group by
+- title
+- status            ENUM              -- DRAFTING -> UNDER_REVIEW
+                                       --   -> APPROVED | ENDORSED | DENIED -> SIGNED
+- assigned_to       FK -> users, NULLABLE     -- drafting officer
+- signatory_required BOOLEAN                   -- mayor signature needed?
+- signed_by         FK -> users, NULLABLE
+- signed_at
+- denial_reason                       -- mandatory when DENIED (RA 11032 written grounds)
+- decision_notes
+- decided_by        FK -> users, NULLABLE
+- decided_at
+- created_by        FK -> users
+- created_at, updated_at
+- INDEX (request_id)
+- INDEX (status)
+- INDEX (document_type_id)            -- monthly report GROUP BY
+
+TABLE document_attachments
+- id                PK
+- document_id       FK -> documents
+- kind              ENUM              -- DRAFT / SIGNED_FINAL / TRANSMISSION_PROOF
+- storage_key, bucket_name, original_name, mime_type, size_bytes, checksum
+- uploaded_by       FK -> users
+- created_at
+- INDEX (document_id)
+
+TABLE transmissions
+- id                PK
+- document_id       FK -> documents
+- recipient_name                       -- person who received
+- receiving_office                     -- office/agency
+- received_by                          -- signature of receiver
+- method                               -- PICKUP / COURIER / EMAIL
+- transmitted_at                       -- business time (may precede row creation
+                                       --   if clerk logs it after the fact)
+- notes
+- proof_attachment_id FK -> document_attachments, NULLABLE  -- scanned signed receipt
+- created_by        FK -> users
+- created_at                           -- system time; audit-relevant divergence
+                                       --   from transmitted_at is intentional
+- INDEX (document_id)
+
+TABLE document_logs                  -- append-only audit trail (document module)
+- id                PK
+- request_id        FK -> requests, NULLABLE
+- document_id       FK -> documents, NULLABLE   -- whichever parent the event touches
+- actor_id          FK -> users
+- actor_name                          -- SNAPSHOT: log stays true after renames
+- actor_role                          -- SNAPSHOT
+- action_type       ENUM              -- RECEIVED, SCREENED_PASS, SCREENED_FAIL,
+                                       --   RETURNED_FOR_COMPLIANCE, RESUBMITTED,
+                                       --   ASSIGNED, DRAFTED, SUBMITTED_REVIEW,
+                                       --   APPROVED, ENDORSED, DENIED, SIGNED,
+                                       --   TRANSMITTED, CLOSED, REOPENED
+- template                             -- "Transmitted to ${payload.recipient_name}..."
+- payload           JSON
+- created_at
+- INDEX (request_id)
+- INDEX (document_id)
+- INDEX (actor_id)
+
+================================================================================
+[C] BOOKING MODULE (4 TABLES)
+================================================================================
+
+TABLE venues                         -- lookup
+- id                PK
+- code              UNIQUE          -- CONFERENCE_ROOM, COMMAND_CENTER, SOCIAL_HALL,
+                                     --   GYMNASIUM, MAYOR_OFFICE, ADMIN_OFFICE
+- name                               -- display label
+- special_use       DEFAULT false   -- true for Mayor's Conf. Room / Admin's
+                                     --   Office ("special meetings"); pair with
+                                     --   EventService:BookSpecialVenue permission
+- is_active         DEFAULT true    -- retire a venue without breaking history
+
+TABLE events
+- id                PK
+- venue_id          FK -> venues
+- title
+- organizer_id      FK -> users, NULLABLE   -- person responsible for the event
+- department                              -- organizing office (free text)
+- event_date        DATE
+- start_time        TIME
+- end_time          TIME
+- status            ENUM            -- CONFIRMED / TENTATIVE / CANCELLED
+- involves_mayor    DEFAULT false   -- Mayor double-booking check without
+                                     --   requiring a Mayor user account
+- involves_administrator DEFAULT false
+- notes
+- created_by        FK -> users
+- created_at, updated_at
+- INDEX (venue_id, event_date)      -- conflict-check hot path
+- INDEX (event_date)                -- calendar / day views
+
+-- Conflict detection (run before INSERT/UPDATE, excludes CANCELLED):
+--   venue:   WHERE venue_id = :v AND event_date = :d AND status != 'CANCELLED'
+--              AND start_time < :new_end AND end_time > :new_start
+--   attendee: same shape joined through event_attendees on user_id
+--   mayor/admin: same date/time overlap on involves_mayor / involves_administrator
+
+TABLE event_attendees                -- join: required attendees (events N --- M users)
+- id                PK
+- event_id          FK -> events
+- user_id           FK -> users      -- must be a user: in-app reminders are the
+                                     --   only notification channel (SMS/email out of scope)
+- UNIQUE (event_id, user_id)
+- INDEX (user_id)                   -- "my schedule today" + attendee conflicts
+
+TABLE activity_logs                  -- append-only audit trail (booking module)
+- id                PK
+- event_id          FK -> events
+- actor_id          FK -> users
+- actor_name, actor_role                 -- snapshots, same pattern as document_logs
+- action_type       ENUM            -- EVENT_CREATED / EVENT_UPDATED / EVENT_CANCELLED
+- template                            -- "Cancelled ${payload.title} at ${payload.venue}"
+- payload           JSON            -- diff/details
+- created_at
+- INDEX (event_id)
+
+-- Reminders are materialized as rows in notifications (type EVENT_REMINDER):
+-- generated idempotently on login / dashboard load for events joined through
+-- event_attendees where event_date falls within the next 24-48h. Still no
+-- email/SMS - delivery channels remain out of scope.
+
+================================================================================
+RELATIONSHIPS SUMMARY
+================================================================================
+  users    1 --- N user_roles          roles    1 --- N user_roles
+  users    1 --- N requests (created_by)
+  users    1 --- N documents (assigned_to / signed_by / decided_by / created_by)
+  users    1 --- N request_attachments (uploaded_by)
+  users    1 --- N document_attachments (uploaded_by)
+  users    1 --- N transmissions (created_by)
+  users    1 --- N document_logs / activity_logs (actor)
+  users    1 --- N events (organizer_id / created_by)
+  users    N --- M events (via event_attendees)
+  users    1 --- N notifications (recipient)
+
+  request_types  1 --- N requests        document_types 1 --- N documents
+  requests       1 --- N request_attachments
+  requests       1 --- N documents (nullable direction: docs may be standalone)
+  documents      1 --- N document_attachments
+  documents      1 --- N transmissions
+  requests/documents 1 --- N document_logs
+  requests / documents / events 1 --- N notifications (nullable source FKs)
+
+  venues         1 --- N events
+  events         1 --- N event_attendees
+  events         1 --- N activity_logs
+
+  NO foreign key crosses the Document Module / Booking Module boundary.
+  The modules share only [A] SHARED PLATFORM.
+================================================================================
