@@ -24,16 +24,25 @@ import {
 } from './cleanData';
 
 const STORAGE_KEYS = {
-  DOCUMENTS: 'docsys_municipal_documents_v2',
-  EVENTS: 'docsys_municipal_events_v2',
-  AUDIT: 'docsys_municipal_audit_v2',
-  USERS: 'docsys_municipal_users_v2',
+  DOCUMENTS: 'docsys_municipal_documents_v3',
+  EVENTS: 'docsys_municipal_events_v3',
+  AUDIT: 'docsys_municipal_audit_v3',
+  USERS: 'docsys_municipal_users_v3',
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
+}
+
+if (isBrowser()) {
+  try {
+    localStorage.removeItem('docsys_municipal_documents_v2');
+    localStorage.removeItem('docsys_municipal_events_v2');
+    localStorage.removeItem('docsys_municipal_audit_v2');
+    localStorage.removeItem('docsys_municipal_users_v2');
+  } catch {}
 }
 
 function getStoredItem<T>(key: string, fallback: T): T {

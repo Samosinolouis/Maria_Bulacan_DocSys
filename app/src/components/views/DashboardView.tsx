@@ -228,61 +228,72 @@ export default function DashboardView() {
               </tr>
             </thead>
             <tbody>
-              {filteredDocuments.map((doc) => {
-                const statusMeta = DOCUMENT_STATUS_META[doc.status];
-                return (
-                  <tr key={doc.id}>
-                    <td>
-                      <span className="docket-control-badge">{doc.controlNumber}</span>
-                    </td>
-                    <td>
-                      <span className="font-semibold text-xs text-[#334155]">
-                        {DOCUMENT_TYPE_LABELS[doc.type]?.label}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="docket-title-cell max-w-md">{doc.title}</div>
-                    </td>
-                    <td>
-                      <div className="font-semibold text-xs text-[#0F172A]">
-                        {doc.requestingParty}
-                      </div>
-                      <div className="text-[10px] text-[#64748B]">{doc.originOffice}</div>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${statusMeta.badgeCls}`}>
-                        {statusMeta.label}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`font-mono text-xs font-bold ${
-                          doc.isOverdue ? 'text-[#081E36]' : 'text-[#15803D]'
-                        }`}
-                      >
-                        {doc.isOverdue ? 'OVERDUE' : '3 Days Valid'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setSelectedDoc(doc)}
-                          className="px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer"
+              {filteredDocuments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-8 text-[#64748B] text-xs">
+                    <div className="space-y-1">
+                      <div className="font-bold text-[#081E36]">No Document Dockets Logged in Registry</div>
+                      <p className="text-[11px]">The municipal docket register is clear and ready for official intake.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredDocuments.map((doc) => {
+                  const statusMeta = DOCUMENT_STATUS_META[doc.status];
+                  return (
+                    <tr key={doc.id}>
+                      <td>
+                        <span className="docket-control-badge">{doc.controlNumber}</span>
+                      </td>
+                      <td>
+                        <span className="font-semibold text-xs text-[#334155]">
+                          {DOCUMENT_TYPE_LABELS[doc.type]?.label}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="docket-title-cell max-w-md">{doc.title}</div>
+                      </td>
+                      <td>
+                        <div className="font-semibold text-xs text-[#0F172A]">
+                          {doc.requestingParty}
+                        </div>
+                        <div className="text-[10px] text-[#64748B]">{doc.originOffice}</div>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${statusMeta.badgeCls}`}>
+                          {statusMeta.label}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`font-mono text-xs font-bold ${
+                            doc.isOverdue ? 'text-[#081E36]' : 'text-[#15803D]'
+                          }`}
                         >
-                          Examine
-                        </button>
-                        <button
-                          onClick={() => setRoutingSlipDoc(doc)}
-                          className="px-2 py-1 border border-[#CBD5E1] hover:bg-[#F1F5F9] rounded text-xs font-semibold cursor-pointer"
-                          title="Print Routing Slip"
-                        >
-                          Slip
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          {doc.isOverdue ? 'OVERDUE' : '3 Days Valid'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedDoc(doc)}
+                            className="btn-fluid px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer shadow-sm"
+                          >
+                            Examine
+                          </button>
+                          <button
+                            onClick={() => setRoutingSlipDoc(doc)}
+                            className="btn-fluid px-2 py-1 border border-[#CBD5E1] hover:bg-[#F1F5F9] rounded text-xs font-semibold cursor-pointer"
+                            title="Print Routing Slip"
+                          >
+                            Slip
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
