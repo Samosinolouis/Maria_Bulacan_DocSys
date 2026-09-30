@@ -2,8 +2,8 @@
 
 import Image from 'next/image';
 import { User } from '@/lib/types';
-import { CURRENT_USERS } from '@/lib/data';
-import { PlusCircle, Shield, UserCheck, Menu, X } from 'lucide-react';
+import { CLEAN_USERS } from '@/lib/cleanData';
+import { PlusCircle, Shield, UserCheck, Menu, X, LogOut } from 'lucide-react';
 
 interface GovHeaderProps {
   currentUser: User;
@@ -11,6 +11,7 @@ interface GovHeaderProps {
   onOpenIntake: () => void;
   mobileMenuOpen?: boolean;
   onToggleMobileMenu?: () => void;
+  onLogout?: () => void;
 }
 
 export default function GovHeader({
@@ -19,6 +20,7 @@ export default function GovHeader({
   onOpenIntake,
   mobileMenuOpen,
   onToggleMobileMenu,
+  onLogout,
 }: GovHeaderProps) {
   return (
     <header className="gov-header">
@@ -90,12 +92,12 @@ export default function GovHeader({
               <select
                 value={currentUser.id}
                 onChange={(e) => {
-                  const selected = CURRENT_USERS.find((u) => u.id === e.target.value);
+                  const selected = CLEAN_USERS.find((u) => u.id === e.target.value);
                   if (selected) onUserChange(selected);
                 }}
                 className="bg-transparent font-bold text-[#081E36] cursor-pointer focus:outline-none text-xs truncate max-w-full"
               >
-                {CURRENT_USERS.map((u) => (
+                {CLEAN_USERS.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.fullName} ({u.title})
                   </option>
@@ -112,6 +114,18 @@ export default function GovHeader({
             <PlusCircle size={15} />
             <span>Intake</span>
           </button>
+
+          {/* Official Sign Out Button */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sign Out of Civil Service Session"
+              className="btn-fluid flex items-center justify-center gap-1 px-2.5 sm:px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#334155] hover:text-[#081E36] rounded text-xs font-bold cursor-pointer shrink-0"
+            >
+              <LogOut size={15} />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

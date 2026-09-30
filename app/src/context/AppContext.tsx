@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import {
   DocumentRecord,
   DocumentStatus,
@@ -9,16 +9,25 @@ import {
   AuditEntry,
 } from '@/lib/types';
 import {
-  CURRENT_USERS,
-  INITIAL_DOCUMENTS,
-  INITIAL_EVENTS,
-  INITIAL_AUDIT_LOGS,
-  VENUE_LABELS,
-} from '@/lib/data';
+  CLEAN_USERS,
+  CLEAN_DOCUMENTS,
+  CLEAN_EVENTS,
+  CLEAN_AUDIT_LOGS,
+} from '@/lib/cleanData';
+import { VENUE_LABELS } from '@/lib/data';
+import {
+  insertDocument,
+  updateDocumentStatusInDb,
+  insertEvent,
+  insertAuditLog,
+} from '@/lib/repository';
 
 interface AppContextType {
   currentUser: User;
   setCurrentUser: (user: User) => void;
+  isAuthenticated: boolean;
+  setIsAuthenticated: (auth: boolean) => void;
+  logout: () => void;
   documents: DocumentRecord[];
   setDocuments: React.Dispatch<React.SetStateAction<DocumentRecord[]>>;
   events: EventBooking[];
@@ -53,10 +62,37 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(CURRENT_USERS[0]);
-  const [documents, setDocuments] = useState<DocumentRecord[]>(INITIAL_DOCUMENTS);
-  const [events, setEvents] = useState<EventBooking[]>(INITIAL_EVENTS);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(INITIAL_AUDIT_LOGS);
+  const [currentUser, setCurrentUser] = useState<User>(CLEAN_USERS[0]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [documents, setDocuments] = useState<DocumentRecord[]>(CLEAN_DOCUMENTS);
+  const [events, setEvents] = useState<EventBooking[]>(CLEAN_EVENTS);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(CLEAN_AUDIT_LOGS);
+
+  // Restore authenticated session on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('docsys_session_user');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setCurrentUser(parsed);
+          setIsAuthenticated(true);
+        } catch {
+          // Keep default
+        }
+      }
+    }
+  }, []);
+
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('docsys_session_user');
+    }
+    setIsAuthenticated(false);
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  };
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,6 +179,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       details: note || `Status updated to ${newStatus}`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    updateDocumentStatusInDb(docId, newStatus, note).catch((e) =>
+      console.warn('PostgreSQL update deferred:', e)
+    );
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
 
     if (selectedDoc && selectedDoc.id === docId) {
       setSelectedDoc((prev) =>
@@ -172,6 +212,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       details: `New document logged at reception desk. Control Number: ${newDoc.controlNumber}. Subject: ${newDoc.title}`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    insertDocument(newDoc).catch((e) => console.warn('PostgreSQL insert deferred:', e));
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
     setNewIntakeOpen(false);
   };
 
@@ -185,9 +227,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       userName: currentUser.fullName,
       userRole: currentUser.role,
       timestamp: new Date().toISOString(),
-      details: `Scheduled event: ${newEvent.title} at ${VENUE_LABELS[newEvent.venue].label} on ${newEvent.date} (${newEvent.startTime} - ${newEvent.endTime})`,
+      details: `Scheduled event: ${newEvent.title} at ${VENUE_LABELS[newEvent.venue]?.label || newEvent.venue} on ${newEvent.date} (${newEvent.startTime} - ${newEvent.endTime})`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    insertEvent(newEvent).catch((e) => console.warn('PostgreSQL event insert deferred:', e));
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
     setNewEventOpen(false);
   };
 
@@ -196,6 +240,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentUser,
         setCurrentUser,
+        isAuthenticated,
+        setIsAuthenticated,
+        logout,
         documents,
         setDocuments,
         events,

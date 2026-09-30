@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import GovMasthead from '@/components/GovMasthead';
 import GovHeader from '@/components/GovHeader';
 import Sidebar from '@/components/Sidebar';
@@ -12,9 +13,11 @@ import EventModal from '@/components/EventModal';
 import { useApp } from '@/context/AppContext';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const {
     currentUser,
     setCurrentUser,
+    logout,
     setNewIntakeOpen,
     newIntakeOpen,
     newEventOpen,
@@ -32,6 +35,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Dedicated full-canvas rendering for login portal
+  if (pathname === '/login') {
+    return <>{children}</>;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFC]">
       {/* 1. National Trust Masthead */}
@@ -44,6 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onOpenIntake={() => setNewIntakeOpen(true)}
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+        onLogout={logout}
       />
 
       {/* 3. Main Operational Area */}
