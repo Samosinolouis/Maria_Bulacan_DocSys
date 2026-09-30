@@ -27,6 +27,7 @@ import {
   attachDocumentToDocket,
   updateDocumentRecord,
 } from '@/lib/repository';
+import { filterAndSearchDocuments, AdvancedSearchFilter } from '@/lib/searchEngine';
 
 interface AppContextType {
   currentUser: User;
@@ -43,8 +44,24 @@ interface AppContextType {
   setSearchQuery: (query: string) => void;
   filterType: string;
   setFilterType: (type: string) => void;
+  filterCategory: string;
+  setFilterCategory: (category: string) => void;
   filterStatus: string;
   setFilterStatus: (status: string) => void;
+  filterPriority: string;
+  setFilterPriority: (priority: string) => void;
+  filterSla: string;
+  setFilterSla: (sla: string) => void;
+  filterOffice: string;
+  setFilterOffice: (office: string) => void;
+  dateFrom: string;
+  setDateFrom: (date: string) => void;
+  dateTo: string;
+  setDateTo: (date: string) => void;
+  hasAttachmentsFilter: string;
+  setHasAttachmentsFilter: (val: string) => void;
+  activeFilterCount: number;
+  resetAllFilters: () => void;
   selectedDoc: DocumentRecord | null;
   setSelectedDoc: (doc: DocumentRecord | null) => void;
   routingSlipDoc: DocumentRecord | null;
@@ -111,10 +128,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Search & Filter
+  // Search & Multi-Parameter Filter Engine State
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [filterCategory, setFilterCategory] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterPriority, setFilterPriority] = useState<string>('ALL');
+  const [filterSla, setFilterSla] = useState<string>('ALL');
+  const [filterOffice, setFilterOffice] = useState<string>('ALL');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [hasAttachmentsFilter, setHasAttachmentsFilter] = useState<string>('ALL');
+
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setFilterType('ALL');
+    setFilterCategory('ALL');
+    setFilterStatus('ALL');
+    setFilterPriority('ALL');
+    setFilterSla('ALL');
+    setFilterOffice('ALL');
+    setDateFrom('');
+    setDateTo('');
+    setHasAttachmentsFilter('ALL');
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim()) count++;
+    if (filterType !== 'ALL') count++;
+    if (filterCategory !== 'ALL') count++;
+    if (filterStatus !== 'ALL') count++;
+    if (filterPriority !== 'ALL') count++;
+    if (filterSla !== 'ALL') count++;
+    if (filterOffice !== 'ALL') count++;
+    if (dateFrom) count++;
+    if (dateTo) count++;
+    if (hasAttachmentsFilter !== 'ALL') count++;
+    return count;
+  }, [
+    searchQuery,
+    filterType,
+    filterCategory,
+    filterStatus,
+    filterPriority,
+    filterSla,
+    filterOffice,
+    dateFrom,
+    dateTo,
+    hasAttachmentsFilter,
+  ]);
 
   // Modals & Navigation
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
@@ -147,19 +211,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [documents]
   );
 
-  // Filtered Documents
+  // High-performance Parametric & Multi-token Filtered Documents
   const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const matchesSearch =
-        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.controlNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.requestingParty.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.originOffice.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = filterType === 'ALL' || doc.type === filterType;
-      const matchesStatus = filterStatus === 'ALL' || doc.status === filterStatus;
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  }, [documents, searchQuery, filterType, filterStatus]);
+    const filter: AdvancedSearchFilter = {
+      query: searchQuery,
+      type: filterType,
+      category: filterCategory,
+      status: filterStatus,
+      priority: filterPriority,
+      slaStatus: filterSla,
+      originOffice: filterOffice,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      hasAttachments: hasAttachmentsFilter,
+    };
+    const scoredResults = filterAndSearchDocuments(documents, filter);
+    return scoredResults.map((r) => r.item);
+  }, [
+    documents,
+    searchQuery,
+    filterType,
+    filterCategory,
+    filterStatus,
+    filterPriority,
+    filterSla,
+    filterOffice,
+    dateFrom,
+    dateTo,
+    hasAttachmentsFilter,
+  ]);
 
   // Handlers
   const handleUpdateStatus = (docId: string, newStatus: DocumentStatus, note?: string) => {
@@ -323,8 +403,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         filterType,
         setFilterType,
+        filterCategory,
+        setFilterCategory,
         filterStatus,
         setFilterStatus,
+        filterPriority,
+        setFilterPriority,
+        filterSla,
+        setFilterSla,
+        filterOffice,
+        setFilterOffice,
+        dateFrom,
+        setDateFrom,
+        dateTo,
+        setDateTo,
+        hasAttachmentsFilter,
+        setHasAttachmentsFilter,
+        activeFilterCount,
+        resetAllFilters,
         selectedDoc,
         setSelectedDoc,
         routingSlipDoc,

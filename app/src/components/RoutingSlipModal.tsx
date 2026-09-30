@@ -17,7 +17,7 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
 
   return (
     <div
-      className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-4 animate-fluid-fade modal-backdrop"
+      className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-4 animate-fluid-fade printable-modal-container"
       onClick={onClose}
     >
       <div
@@ -77,8 +77,8 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
 
             <div className="relative h-12 w-auto shrink-0">
               <Image
-                src="/assets/bagong-pilipinas.svg"
-                alt="Bagong Pilipinas"
+                src="/assets/bagong-pilipinas-logo.webp"
+                alt="Bagong Pilipinas Official Seal"
                 width={48}
                 height={48}
                 className="object-contain h-12 w-auto"

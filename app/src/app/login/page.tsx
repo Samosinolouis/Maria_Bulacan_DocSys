@@ -89,7 +89,7 @@ export default function LoginPage() {
                 <div className="h-12 w-px bg-white/20" />
                 <div className="relative w-14 h-14 shrink-0">
                   <Image
-                    src="/assets/bagong-pilipinas.svg"
+                    src="/assets/bagong-pilipinas-logo.webp"
                     alt="Bagong Pilipinas Official Insignia"
                     width={56}
                     height={56}

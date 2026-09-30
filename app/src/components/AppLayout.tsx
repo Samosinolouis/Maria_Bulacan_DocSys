@@ -19,8 +19,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     currentUser,
     setCurrentUser,
     logout,
-    setNewIntakeOpen,
     newIntakeOpen,
+    setNewIntakeOpen,
     newEventOpen,
     setNewEventOpen,
     selectedDoc,
@@ -52,7 +52,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <GovHeader
         currentUser={currentUser}
         onUserChange={setCurrentUser}
-        onOpenIntake={() => setNewIntakeOpen(true)}
         mobileMenuOpen={mobileMenuOpen}
         onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
         onLogout={logout}
@@ -96,11 +95,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {wordPreviewDoc && (
           <div
-            className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fluid-fade modal-backdrop"
+            className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fluid-fade printable-modal-container"
             onClick={() => setWordPreviewDoc(null)}
           >
             <div
-              className="w-full max-w-4xl max-h-[96vh] overflow-y-auto my-auto"
+              className="w-full max-w-4xl max-h-[96vh] overflow-y-auto my-auto print:max-h-none print:overflow-visible print:my-0"
               onClick={(e) => e.stopPropagation()}
             >
               <OfficialWordDocument

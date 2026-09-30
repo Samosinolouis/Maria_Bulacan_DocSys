@@ -81,11 +81,11 @@ export default function OfficialWordDocument({
         {/* ========================================================================= */}
         <header className="letterhead-header border-b-2 border-black pb-2 mb-6">
           <div className="flex items-center justify-between gap-4">
-            {/* Left Heraldic Seal: Province of Bulacan / Republic of the Philippines */}
+            {/* Left Seal: Bagong Pilipinas Official Seal (per user specification) */}
             <div className="w-20 h-20 shrink-0 flex items-center justify-center">
               <img
-                src="/BULACAN LOGO.png"
-                alt="Sagisag ng Lalawigan ng Bulacan"
+                src="/assets/bagong-pilipinas-logo.webp"
+                alt="Bagong Pilipinas Official Seal"
                 className="w-18 h-18 object-contain"
               />
             </div>
@@ -114,11 +114,11 @@ export default function OfficialWordDocument({
               </div>
             </div>
 
-            {/* Right Seal: Santa Maria Municipal Coat of Arms */}
+            {/* Right Seal: Bayan ng Santa Maria */}
             <div className="w-20 h-20 shrink-0 flex items-center justify-center">
               <img
                 src="/assets/santa-maria-seal.png"
-                alt="Bayan ng Santa Maria Seal"
+                alt="Official Seal of the Municipality of Santa Maria, Bulacan"
                 className="w-18 h-18 object-contain"
               />
             </div>

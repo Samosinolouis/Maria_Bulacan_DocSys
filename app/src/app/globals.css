@@ -234,7 +234,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: #94A3B8;
 }
 
-/* Municipal Docket Ledger Table */
+/* Municipal Docket Ledger Table - Clean Minimalist Government Aesthetic */
 .municipal-docket-table {
   width: 100%;
   border-collapse: collapse;
@@ -243,21 +243,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .municipal-docket-table th {
-  background: var(--civic-primary-darker);
-  color: #F8FAFC;
+  background: #F8FAFC;
+  color: #475569;
   font-family: var(--font-sans), sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 2px solid var(--civic-primary);
+  border-bottom: 1px solid #E2E8F0;
 }
 
 .municipal-docket-table td {
   padding: 0.875rem 1rem;
-  border-bottom: 1px solid var(--neutral-200);
+  border-bottom: 1px solid #E2E8F0;
   vertical-align: middle;
 }
 
@@ -275,8 +275,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.2rem 0.5rem;
-  background: var(--civic-primary-darker);
-  color: #FFFFFF;
+  background: #F1F5F9;
+  color: #081E36;
+  border: 1px solid #CBD5E1;
   border-radius: 4px;
   display: inline-block;
   letter-spacing: 0.02em;
@@ -408,12 +409,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .app-layout-sidebar,
   .gov-header,
   .executive-operations-hud,
-  .modal-backdrop,
   input,
   textarea,
   select {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  /* Ensure modal containers containing printable sheets remain visible and non-blocking in print */
+  .printable-modal-container,
+  .modal-backdrop {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    inset: auto !important;
   }
 
   /* Strict visibility isolation: Only the printable sheet appears */
@@ -431,17 +448,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   /* Format the printable paper sheet to fit the physical page flawlessly */
   .printable-word-document,
   .printable-routing-slip {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: static !important;
+    display: block !important;
     width: 100% !important;
     max-width: 100% !important;
     min-height: auto !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
-    background: transparent !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
   }
 
   /* Ensure text justification and spacing look identical to Word */

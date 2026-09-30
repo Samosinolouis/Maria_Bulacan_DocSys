@@ -786,29 +786,29 @@ export default function DocumentDetailModal({
 
         {/* Operational Footer Bar with Direct Actions */}
         <div className="bg-[#F8FAFC] border-t border-[#CBD5E1] px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => onPrintRoutingSlip(doc)}
-              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#081E36] rounded text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
               title="Print 1-Page Official Transmittal & ARTA Routing Slip"
             >
-              <Printer size={14} />
-              <span>Official Routing Slip</span>
+              <Printer size={13} className="text-[#64748B]" />
+              <span>Routing Slip</span>
             </button>
             <button
               onClick={() => setWordPreviewDoc(doc)}
-              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#FCD116] hover:bg-[#FACC15] text-[#081E36] rounded text-xs font-bold cursor-pointer shadow-sm"
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer shadow-xs transition-colors"
               title="Print Document formatted in authentic Microsoft Word layout"
             >
-              <Printer size={14} />
-              <span>Print Word Document</span>
+              <Printer size={13} className="text-[#FCD116]" />
+              <span>Word Print</span>
             </button>
             <button
               onClick={handleDraftInStudio}
-              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 border border-[#CBD5E1] hover:bg-[#F1F5F9] text-[#081E36] rounded text-xs font-bold cursor-pointer shadow-sm"
+              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#334155] hover:text-[#081E36] rounded text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
               title="Draft or edit official Executive Order or Indorsement for this docket"
             >
-              <FileText size={14} />
+              <FileText size={13} className="text-[#64748B]" />
               <span>Draft in Studio</span>
             </button>
           </div>

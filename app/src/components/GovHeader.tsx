@@ -3,12 +3,11 @@
 import Image from 'next/image';
 import { User } from '@/lib/types';
 import { CLEAN_USERS } from '@/lib/cleanData';
-import { PlusCircle, Shield, UserCheck, Menu, X, LogOut } from 'lucide-react';
+import { UserCheck, Menu, X, LogOut } from 'lucide-react';
 
 interface GovHeaderProps {
   currentUser: User;
   onUserChange: (user: User) => void;
-  onOpenIntake: () => void;
   mobileMenuOpen?: boolean;
   onToggleMobileMenu?: () => void;
   onLogout?: () => void;
@@ -17,7 +16,6 @@ interface GovHeaderProps {
 export default function GovHeader({
   currentUser,
   onUserChange,
-  onOpenIntake,
   mobileMenuOpen,
   onToggleMobileMenu,
   onLogout,
@@ -59,7 +57,7 @@ export default function GovHeader({
 
             <div className="relative h-12 w-auto hidden md:block shrink-0 ml-2 border-l border-[#E2E8F0] pl-4">
               <Image
-                src="/assets/bagong-pilipinas.svg"
+                src="/assets/bagong-pilipinas-logo.webp"
                 alt="Bagong Pilipinas Official Seal"
                 width={48}
                 height={48}
@@ -105,15 +103,6 @@ export default function GovHeader({
               </select>
             </div>
           </div>
-
-          {/* Document Intake Button */}
-          <button
-            onClick={onOpenIntake}
-            className="btn-fluid flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow hover:shadow-md cursor-pointer shrink-0"
-          >
-            <PlusCircle size={15} />
-            <span>Intake</span>
-          </button>
 
           {/* Official Sign Out Button */}
           {onLogout && (
