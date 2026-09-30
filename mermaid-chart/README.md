@@ -223,7 +223,7 @@ Enforces the statutory document intake, preparation, legal review, executive ind
 erDiagram
     DOCUMENTS ||--o{ ATTACHMENTS : "has_annexes (1:N)"
     DOCUMENTS ||--o| TRANSMISSIONS : "dispatches_to (1:0..1)"
-    DOCUMENT_TEMPLATES ..o{ DOCUMENTS : "formats (schema)"
+    DOCUMENT_TEMPLATES ||--o{ DOCUMENTS : "standardizes (1:N)"
 
     DOCUMENTS {
         string id PK "UUID"
