@@ -1,0 +1,63 @@
+# [B] DOCUMENT MODULE — attachments (upload-only) & secure downloads
+
+enum RequestAttachmentKind {
+  INCOMING_LETTER
+  ANNEX
+}
+
+enum DocumentAttachmentKind {
+  DRAFT
+  SIGNED_FINAL
+  TRANSMISSION_PROOF
+}
+
+type RequestAttachment implements Node {
+  id: ID!
+  requestId: ID!
+  kind: RequestAttachmentKind!
+  bucketName: String!
+  originalName: String!
+  mimeType: String!
+  sizeBytes: Int!
+  """Server-computed SHA-256 (tamper-evidence)."""
+  checksum: String!
+  uploadedBy: ID!
+  createdAt: DateTime!
+}
+
+type DocumentAttachment implements Node {
+  id: ID!
+  documentId: ID!
+  kind: DocumentAttachmentKind!
+  bucketName: String!
+  originalName: String!
+  mimeType: String!
+  sizeBytes: Int!
+  checksum: String!
+  uploadedBy: ID!
+  createdAt: DateTime!
+}
+
+"""A short-lived presigned download descriptor (NFR-06)."""
+type DownloadTicket {
+  url: String!
+  expiresInSeconds: Int!
+  fileName: String!
+  mimeType: String!
+}
+
+extend type Query {
+  requestAttachments(requestId: ID!): [RequestAttachment!]!
+  documentAttachments(documentId: ID!): [DocumentAttachment!]!
+}
+
+extend type Mutation {
+  """
+  Get a short-lived presigned URL for a request attachment (FR-34).
+  NOTE: the actual upload is multipart and handled by the REST routes
+  (POST /uploads/requests/:id, POST /uploads/documents/:id), not GraphQL.
+  """
+  requestAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicket!
+  """Get a short-lived presigned URL for a document attachment (FR-34)."""
+  documentAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicket!
+}

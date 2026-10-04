@@ -1,0 +1,163 @@
+# [C] BOOKING MODULE — venues & events (FR-41..46)
+
+enum EventStatus {
+  CONFIRMED
+  TENTATIVE
+  CANCELLED
+}
+
+enum BookingConflictKind {
+  VENUE
+  ATTENDEE
+  MAYOR
+  ADMINISTRATOR
+}
+
+"""A detected scheduling conflict (FR-42)."""
+type BookingConflict {
+  kind: BookingConflictKind!
+  message: String!
+  conflictingEventIds: [ID!]!
+}
+
+type Event implements Node {
+  id: ID!
+  venueId: ID!
+  venue: Venue
+  title: String!
+  organizerId: ID
+  department: String!
+  eventDate: String!
+  startTime: String!
+  endTime: String!
+  status: EventStatus!
+  """Mayor double-booking check without a Mayor user account."""
+  involvesMayor: Boolean!
+  involvesAdministrator: Boolean!
+  notes: String
+  createdBy: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Required attendees (users) and their display names."""
+  attendees: [EventAttendee!]!
+  logs: [ActivityLog!]!
+}
+
+type EventAttendee {
+  userId: ID!
+  name: String!
+}
+
+enum ActivityLogAction {
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_CANCELLED
+}
+
+type ActivityLog implements Node {
+  id: ID!
+  eventId: ID!
+  actorId: ID!
+  actorName: String!
+  actorRole: String!
+  actionType: ActivityLogAction!
+  template: String!
+  payload: JSON!
+  createdAt: DateTime!
+}
+
+type EventEdge {
+  node: Event!
+  cursor: String!
+}
+
+type EventConnection {
+  edges: [EventEdge!]!
+  pageInfo: PageInfo!
+}
+
+# --- Inputs ---
+
+input EventFilterInput {
+  venueId: ID
+  status: EventStatus
+  department: String
+  involvesMayor: Boolean
+  involvesAdministrator: Boolean
+  dateFrom: String
+  dateTo: String
+}
+
+input EventSortInput {
+  field: EventSortField!
+  direction: SortDirection = ASC
+}
+
+enum EventSortField {
+  EVENT_DATE
+  START_TIME
+  TITLE
+  CREATED_AT
+}
+
+input CreateEventInput {
+  venueId: ID!
+  title: String!
+  organizerId: ID
+  department: String!
+  """YYYY-MM-DD."""
+  eventDate: String!
+  """HH:MM(:SS)."""
+  startTime: String!
+  endTime: String!
+  status: EventStatus = CONFIRMED
+  involvesMayor: Boolean = false
+  involvesAdministrator: Boolean = false
+  notes: String
+  attendeeIds: [ID!]
+}
+
+input UpdateEventInput {
+  eventId: ID!
+  venueId: ID
+  title: String
+  organizerId: ID
+  department: String
+  eventDate: String
+  startTime: String
+  endTime: String
+  status: EventStatus
+  involvesMayor: Boolean
+  involvesAdministrator: Boolean
+  notes: String
+  attendeeIds: [ID!]
+}
+
+# --- Queries ---
+
+extend type Query {
+  event(id: ID!): Event
+  events(
+    first: Int = 20
+    after: String
+    search: String
+    filter: EventFilterInput
+    sort: EventSortInput
+  ): EventConnection!
+
+  """The authenticated user's schedule (FR-44)."""
+  mySchedule(date: String): [Event!]!
+
+  """Dry-run conflict detection for a proposed slot (FR-42)."""
+  checkEventConflicts(input: CreateEventInput!): [BookingConflict!]!
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  createEvent(input: CreateEventInput!): Event!
+  updateEvent(input: UpdateEventInput!): Event!
+  """Cancellation is a status change, never a delete."""
+  cancelEvent(id: ID!, reason: String): Event!
+}

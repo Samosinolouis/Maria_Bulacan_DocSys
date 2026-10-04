@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment — never commit
+.env
+.env.local
+.env.*.local
+
+# Drizzle generated migrations (commit if you want versioned migrations tracked)
+# drizzle/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

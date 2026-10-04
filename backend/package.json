@@ -1,28 +1,58 @@
 {
-  "name": "backend",
+  "name": "maria-bulacan-docsys",
   "version": "1.0.0",
-  "description": "DocSys backend REST API",
-  "main": "index.ts",
-  "scripts": {
-    "start": "node index.ts",
-    "dev": "nodemon index.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "Santa Maria Bulacan Document Management System — GraphQL API (Apollo + Fastify + Drizzle + Keycloak + Backblaze B2)",
+  "main": "dist/index.js",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "lint": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "dms",
+    "document-management",
+    "graphql",
+    "apollo",
+    "drizzle",
+    "keycloak",
+    "backblaze-b2"
+  ],
+  "author": "Municipal Administrator's Office - Santa Maria, Bulacan",
+  "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1"
+    "@graphql-tools/load-files": "^7.0.0",
+    "@graphql-tools/merge": "^9.0.0",
+    "dataloader": "^2.2.3",
+    "dotenv": "^16.4.0",
+    "drizzle-orm": "^0.39.0",
+    "fastify": "^4.28.0",
+    "graphql": "^16.10.0",
+    "graphql-scalars": "^1.24.0",
+    "mercurius": "^14.1.0",
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0",
+    "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^26.6.4",
-    "nodemon": "^3.1.14",
-    "typescript": "^7.0.2"
+    "@graphql-codegen/cli": "^6.1.2",
+    "@graphql-codegen/typescript": "^5.0.8",
+    "@graphql-codegen/typescript-resolvers": "^5.1.6",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "drizzle-kit": "^0.30.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   }
 }

@@ -1,0 +1,16 @@
+# Custom scalars used across the schema.
+
+"""
+An ISO-8601 date-time string (stored/rendered in Philippine Standard Time, UTC+8).
+"""
+scalar DateTime
+
+"""
+An arbitrary JSON value (object or array).
+"""
+scalar JSON
+
+"""
+A UUID string.
+"""
+scalar UUID

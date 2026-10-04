@@ -1,0 +1,143 @@
+# [B] DOCUMENT MODULE — Step 1 (reception) & Step 2 (screening)
+
+enum RequestStatus {
+  RECEIVED
+  SCREENING
+  RETURNED_FOR_COMPLIANCE
+  PREPARATION
+  REVIEW
+  APPROVED
+  ENDORSED
+  DENIED
+  TRANSMITTED
+  CLOSED
+}
+
+enum RequestPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum RequestChannel {
+  WALK_IN
+  MAIL
+  COURIER
+  EMAIL
+}
+
+type RequestType implements Node {
+  id: ID!
+  code: String!
+  name: String!
+  description: String!
+  prefix: String!
+  isActive: Boolean!
+}
+
+type Request implements Node {
+  id: ID!
+  controlNo: String!
+  requestTypeId: ID!
+  requestType: RequestType
+  title: String!
+  requestingParty: String!
+  originOffice: String!
+  channel: RequestChannel!
+  priority: RequestPriority!
+  receivedAt: DateTime!
+  """received_at + 3 business days (RA 11032)."""
+  slaDeadline: DateTime!
+  status: RequestStatus!
+  createdBy: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Output documents produced from this request (0..N)."""
+  documents: [Document!]!
+  """Uploaded incoming letters and annexes."""
+  attachments: [RequestAttachment!]!
+  """Append-only audit trail, newest-first."""
+  logs: [DocumentLog!]!
+}
+
+type RequestEdge {
+  node: Request!
+  cursor: String!
+}
+
+type RequestConnection {
+  edges: [RequestEdge!]!
+  pageInfo: PageInfo!
+}
+
+# --- Inputs ---
+
+input RequestFilterInput {
+  status: RequestStatus
+  requestTypeId: ID
+  originOffice: String
+  priority: RequestPriority
+  slaAtRisk: Boolean
+  slaOverdue: Boolean
+  receivedFrom: DateTime
+  receivedTo: DateTime
+}
+
+input RequestSortInput {
+  field: RequestSortField!
+  direction: SortDirection = DESC
+}
+
+enum RequestSortField {
+  RECEIVED_AT
+  SLA_DEADLINE
+  CONTROL_NO
+  TITLE
+  PRIORITY
+}
+
+input EncodeRequestInput {
+  requestTypeId: ID!
+  title: String!
+  requestingParty: String!
+  originOffice: String!
+  channel: RequestChannel!
+  priority: RequestPriority = NORMAL
+  receivedAt: DateTime
+}
+
+input ScreenRequestInput {
+  requestId: ID!
+  passed: Boolean!
+  """Specific deficiencies — required when passed = false (FR-13)."""
+  deficiencies: [String!]
+  notes: String
+}
+
+# --- Queries ---
+
+extend type Query {
+  request(id: ID!): Request
+  requestByControlNo(controlNo: String!): Request
+  requests(
+    first: Int = 20
+    after: String
+    search: String
+    filter: RequestFilterInput
+    sort: RequestSortInput
+  ): RequestConnection!
+
+  requestTypes(includeInactive: Boolean = false): [RequestType!]!
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  """Encode an incoming request; issues a control number + RECEIVED log."""
+  encodeRequest(input: EncodeRequestInput!): Request!
+  """Record a screening decision (pass -> PREPARATION; fail -> RETURNED_FOR_COMPLIANCE)."""
+  screenRequest(input: ScreenRequestInput!): Request!
+  """Resubmit a returned request back into screening (FR-14)."""
+  resubmitRequest(id: ID!): Request!
+}

@@ -1,0 +1,29 @@
+# Root schema — base Query/Mutation extended by each domain module.
+
+"""
+An object with a globally unique ID.
+"""
+interface Node {
+  id: ID!
+}
+
+"""
+Cursor-based pagination metadata (Relay-style).
+"""
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+  totalCount: Int!
+}
+
+type Query {
+  """Liveness probe — always returns "ok"."""
+  _health: String!
+}
+
+type Mutation {
+  """Placeholder to keep the Mutation type valid before domains extend it."""
+  _noop: Boolean
+}

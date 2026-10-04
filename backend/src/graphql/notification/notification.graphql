@@ -1,0 +1,72 @@
+# [A] SHARED PLATFORM — in-app notifications (FR-47..51)
+
+enum NotificationType {
+  EVENT_REMINDER
+  EVENT_UPDATED
+  EVENT_CANCELLED
+  SUBMITTED_FOR_REVIEW
+  DECISION_RECORDED
+  SLA_AT_RISK
+  SLA_OVERDUE
+}
+
+type Notification implements Node {
+  id: ID!
+  userId: ID!
+  type: NotificationType!
+  title: String!
+  payload: JSON!
+  template: String!
+  """Deep-link source entity (nullable-trio)."""
+  requestId: ID
+  documentId: ID
+  eventId: ID
+  """NULL = unread."""
+  readAt: DateTime
+  createdAt: DateTime!
+}
+
+type NotificationEdge {
+  node: Notification!
+  cursor: String!
+}
+
+type NotificationConnection {
+  edges: [NotificationEdge!]!
+  pageInfo: PageInfo!
+}
+
+input NotificationFilterInput {
+  unreadOnly: Boolean
+  type: NotificationType
+}
+
+input NotificationSortInput {
+  field: NotificationSortField!
+  direction: SortDirection = ASC
+}
+
+enum NotificationSortField {
+  CREATED_AT
+}
+
+extend type Query {
+  """The authenticated user's inbox, newest-first (FR-48)."""
+  notifications(
+    first: Int = 20
+    after: String
+    filter: NotificationFilterInput
+    sort: NotificationSortInput
+  ): NotificationConnection!
+
+  """Unread count for the notification bell (FR-48)."""
+  unreadNotificationCount: Int!
+
+  """Idempotently materialize EVENT_REMINDER rows for the next 24-48h (FR-45)."""
+  generateEventReminders: Int!
+}
+
+extend type Mutation {
+  markNotificationRead(id: ID!): Notification
+  markAllNotificationsRead: Int!
+}

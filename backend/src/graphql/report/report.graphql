@@ -1,0 +1,97 @@
+# [B] DOCUMENT MODULE — dashboards, reports & lookup maintenance (FR-35..38)
+
+type DashboardMetrics {
+  totalDocuments: Int!
+  incomingRequests: Int!
+  pendingActions: Int!
+  closedTransactions: Int!
+  slaAtRisk: Int!
+  slaOverdue: Int!
+}
+
+type CategorySummaryRow {
+  documentTypeId: ID!
+  code: String!
+  name: String!
+  count: Int!
+}
+
+type ReportArtifact {
+  fileName: String!
+  mimeType: String!
+  """Base64-encoded artifact bytes."""
+  bodyBase64: String!
+}
+
+enum ReportPeriod {
+  MONTHLY
+  ANNUAL
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+}
+
+input CategorySummaryInput {
+  period: ReportPeriod!
+  year: Int!
+  """Required when period = MONTHLY (1-12)."""
+  month: Int
+}
+
+input ExportReportInput {
+  period: ReportPeriod!
+  year: Int!
+  month: Int
+  format: ReportFormat!
+}
+
+type Holiday implements Node {
+  id: ID!
+  """YYYY-MM-DD."""
+  holidayDate: String!
+  name: String!
+}
+
+input CreateRequestTypeInput {
+  code: String!
+  name: String!
+  description: String!
+  prefix: String!
+  isActive: Boolean = true
+}
+
+input CreateDocumentTypeInput {
+  code: String!
+  name: String!
+  description: String!
+  prefix: String!
+  isActive: Boolean = true
+}
+
+input UpsertHolidayInput {
+  """YYYY-MM-DD."""
+  holidayDate: String!
+  name: String!
+}
+
+extend type Query {
+  """Workload + SLA snapshot for the dashboard (FR-35)."""
+  dashboardMetrics: DashboardMetrics!
+
+  """Monthly / annual per-category counts (FR-36)."""
+  categorySummary(input: CategorySummaryInput!): [CategorySummaryRow!]!
+
+  """Holidays within a window — feeds SLA computation (FR-09)."""
+  holidays(from: String, to: String): [Holiday!]!
+}
+
+extend type Mutation {
+  """Export a summary to PDF or Excel (FR-37)."""
+  exportSummary(input: ExportReportInput!): ReportArtifact!
+
+  createRequestType(input: CreateRequestTypeInput!): RequestType!
+  createDocumentType(input: CreateDocumentTypeInput!): DocumentType!
+  upsertHoliday(input: UpsertHolidayInput!): Holiday!
+}

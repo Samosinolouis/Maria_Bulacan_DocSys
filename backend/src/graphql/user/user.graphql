@@ -1,0 +1,114 @@
+# [A] SHARED PLATFORM — users, roles, user_roles
+
+type User implements Node {
+  id: ID!
+  firstName: String!
+  middleName: String
+  lastName: String!
+  suffix: String
+  email: String!
+  contactNo: String!
+  office: String!
+  position: String!
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Roles assigned to this user."""
+  roles: [Role!]!
+
+  """Effective permission set = union of role payloads (with wildcards)."""
+  effectivePermissions: [String!]!
+}
+
+type Role implements Node {
+  id: ID!
+  name: String!
+  description: String!
+  """Permission strings in "Service:Action" form; "*" wildcards allowed."""
+  permissionPayload: [String!]!
+  createdAt: DateTime!
+}
+
+type UserEdge {
+  node: User!
+  cursor: String!
+}
+
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+# --- Inputs ---
+
+input UserFilterInput {
+  isActive: Boolean
+  office: String
+  roleName: String
+}
+
+input UserSortInput {
+  field: UserSortField!
+  direction: SortDirection = ASC
+}
+
+enum UserSortField {
+  CREATED_AT
+  FIRST_NAME
+  LAST_NAME
+  EMAIL
+}
+
+enum SortDirection {
+  ASC
+  DESC
+}
+
+input UpdateUserProfileInput {
+  firstName: String
+  middleName: String
+  lastName: String
+  suffix: String
+  email: String
+  contactNo: String
+  office: String
+  position: String
+}
+
+input AssignRoleInput {
+  userId: ID!
+  roleId: ID!
+}
+
+input RemoveRoleInput {
+  userId: ID!
+  roleId: ID!
+}
+
+# --- Queries ---
+
+extend type Query {
+  """The authenticated user's shadow record."""
+  me: User
+  user(id: ID!): User
+  users(
+    first: Int = 20
+    after: String
+    search: String
+    filter: UserFilterInput
+    sort: UserSortInput
+  ): UserConnection!
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  updateUserProfile(id: ID!, input: UpdateUserProfileInput!): User!
+  """Soft deactivation — users are never deleted (FR-03)."""
+  deactivateUser(id: ID!): User!
+  reactivateUser(id: ID!): User!
+  """Role assignment records who granted the role and when (FR-04)."""
+  assignRole(input: AssignRoleInput!): User!
+  removeRole(input: RemoveRoleInput!): User!
+}

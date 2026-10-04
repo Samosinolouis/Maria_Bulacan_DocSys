@@ -1,0 +1,62 @@
+# [A] SHARED PLATFORM — roles & permissions
+
+type RoleEdge {
+  node: Role!
+  cursor: String!
+}
+
+type RoleConnection {
+  edges: [RoleEdge!]!
+  pageInfo: PageInfo!
+}
+
+type PermissionCatalogEntry {
+  service: String!
+  actions: [String!]!
+}
+
+input RoleFilterInput {
+  name: String
+}
+
+input RoleSortInput {
+  field: RoleSortField!
+  direction: SortDirection = ASC
+}
+
+enum RoleSortField {
+  NAME
+  CREATED_AT
+}
+
+input CreateRoleInput {
+  name: String!
+  description: String!
+  """Permission strings; validated against ^[\\w*]+:[\\w*]+$ (NFR-21)."""
+  permissionPayload: [String!]!
+}
+
+input UpdateRoleInput {
+  name: String
+  description: String
+  permissionPayload: [String!]
+}
+
+extend type Query {
+  role(id: ID!): Role
+  roles(
+    first: Int = 20
+    after: String
+    search: String
+    filter: RoleFilterInput
+    sort: RoleSortInput
+  ): RoleConnection!
+
+  """The static permission catalog defined in code (NFR-21)."""
+  permissionCatalog: [PermissionCatalogEntry!]!
+}
+
+extend type Mutation {
+  createRole(input: CreateRoleInput!): Role!
+  updateRole(id: ID!, input: UpdateRoleInput!): Role!
+}

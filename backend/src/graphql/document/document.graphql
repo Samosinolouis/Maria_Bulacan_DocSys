@@ -1,0 +1,205 @@
+# [B] DOCUMENT MODULE — Steps 3-6 (preparation, review, transmission, archiving)
+
+enum DocumentStatus {
+  DRAFTING
+  UNDER_REVIEW
+  APPROVED
+  ENDORSED
+  DENIED
+  SIGNED
+}
+
+enum TransmissionMethod {
+  PICKUP
+  COURIER
+  EMAIL
+}
+
+enum DocumentLogAction {
+  RECEIVED
+  SCREENED_PASS
+  SCREENED_FAIL
+  RETURNED_FOR_COMPLIANCE
+  RESUBMITTED
+  ASSIGNED
+  DRAFTED
+  SUBMITTED_REVIEW
+  APPROVED
+  ENDORSED
+  DENIED
+  SIGNED
+  TRANSMITTED
+  CLOSED
+  REOPENED
+}
+
+type DocumentType implements Node {
+  id: ID!
+  code: String!
+  name: String!
+  description: String!
+  prefix: String!
+  isActive: Boolean!
+}
+
+type Document implements Node {
+  id: ID!
+  """NULL = issued without a request (sua sponte EO / MO)."""
+  requestId: ID
+  controlNo: String!
+  documentTypeId: ID!
+  documentType: DocumentType
+  title: String!
+  status: DocumentStatus!
+  assignedTo: ID
+  signatoryRequired: Boolean!
+  signedBy: ID
+  signedAt: DateTime
+  """Mandatory written grounds when DENIED."""
+  denialReason: String
+  decisionNotes: String
+  decidedBy: ID
+  decidedAt: DateTime
+  createdBy: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  attachments: [DocumentAttachment!]!
+  transmissions: [Transmission!]!
+  logs: [DocumentLog!]!
+}
+
+type Transmission implements Node {
+  id: ID!
+  documentId: ID!
+  recipientName: String!
+  receivingOffice: String!
+  receivedBy: String!
+  method: TransmissionMethod!
+  transmittedAt: DateTime!
+  notes: String
+  proofAttachmentId: ID
+  createdBy: ID!
+  createdAt: DateTime!
+}
+
+type DocumentLog implements Node {
+  id: ID!
+  requestId: ID
+  documentId: ID
+  actorId: ID!
+  """SNAPSHOT — survives renames."""
+  actorName: String!
+  """SNAPSHOT."""
+  actorRole: String!
+  actionType: DocumentLogAction!
+  template: String!
+  payload: JSON!
+  createdAt: DateTime!
+}
+
+type DocumentEdge {
+  node: Document!
+  cursor: String!
+}
+
+type DocumentConnection {
+  edges: [DocumentEdge!]!
+  pageInfo: PageInfo!
+}
+
+# --- Inputs ---
+
+input DocumentFilterInput {
+  status: DocumentStatus
+  documentTypeId: ID
+  requestId: ID
+  assignedTo: ID
+}
+
+input DocumentSortInput {
+  field: DocumentSortField!
+  direction: SortDirection = DESC
+}
+
+enum DocumentSortField {
+  CREATED_AT
+  CONTROL_NO
+  TITLE
+  STATUS
+}
+
+input PrepareDocumentInput {
+  """Omit for a standalone issuance (EO / MO)."""
+  requestId: ID
+  documentTypeId: ID!
+  title: String!
+  assignedTo: ID
+  signatoryRequired: Boolean = false
+}
+
+input ReviewDocumentInput {
+  documentId: ID!
+  decision: ReviewDecision!
+  """Mandatory when decision = DENIED (FR-23)."""
+  denialReason: String
+  decisionNotes: String
+  signatoryRequired: Boolean
+}
+
+enum ReviewDecision {
+  APPROVED
+  ENDORSED
+  DENIED
+}
+
+input SignDocumentInput {
+  documentId: ID!
+  signedBy: ID!
+  signedAt: DateTime
+}
+
+input TransmitDocumentInput {
+  documentId: ID!
+  recipientName: String!
+  receivingOffice: String!
+  receivedBy: String!
+  method: TransmissionMethod!
+  transmittedAt: DateTime
+  notes: String
+  proofAttachmentId: ID
+}
+
+input CloseRequestInput {
+  requestId: ID!
+  """SIGNED_FINAL attachment id — required before closing (FR-29)."""
+  finalAttachmentId: ID
+  notes: String
+}
+
+# --- Queries ---
+
+extend type Query {
+  document(id: ID!): Document
+  documentByControlNo(controlNo: String!): Document
+  documents(
+    first: Int = 20
+    after: String
+    search: String
+    filter: DocumentFilterInput
+    sort: DocumentSortInput
+  ): DocumentConnection!
+
+  documentTypes(includeInactive: Boolean = false): [DocumentType!]!
+}
+
+# --- Mutations ---
+
+extend type Mutation {
+  prepareDocument(input: PrepareDocumentInput!): Document!
+  submitDocumentForReview(id: ID!): Document!
+  reviewDocument(input: ReviewDocumentInput!): Document!
+  signDocument(input: SignDocumentInput!): Document!
+  transmitDocument(input: TransmitDocumentInput!): Document!
+  closeRequest(input: CloseRequestInput!): Document!
+}

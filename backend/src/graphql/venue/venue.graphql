@@ -1,0 +1,15 @@
+# [C] BOOKING MODULE — venue lookup
+
+type Venue implements Node {
+  id: ID!
+  code: String!
+  name: String!
+  """true for Mayor's Conf. Room / Admin's Office (special meetings)."""
+  specialUse: Boolean!
+  isActive: Boolean!
+}
+
+extend type Query {
+  venue(id: ID!): Venue
+  venues(includeInactive: Boolean = false): [Venue!]!
+}
