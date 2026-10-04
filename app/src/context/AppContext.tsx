@@ -1,24 +1,40 @@
 'use client';
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import {
   DocumentRecord,
   DocumentStatus,
   EventBooking,
   User,
   AuditEntry,
+  Attachment,
 } from '@/lib/types';
 import {
-  CURRENT_USERS,
-  INITIAL_DOCUMENTS,
-  INITIAL_EVENTS,
-  INITIAL_AUDIT_LOGS,
-  VENUE_LABELS,
-} from '@/lib/data';
+  CLEAN_USERS,
+  CLEAN_DOCUMENTS,
+  CLEAN_EVENTS,
+  CLEAN_AUDIT_LOGS,
+} from '@/lib/cleanData';
+import { VENUE_LABELS } from '@/lib/data';
+import {
+  fetchDocuments,
+  fetchEvents,
+  fetchAuditLogs,
+  insertDocument,
+  updateDocumentStatusInDb,
+  insertEvent,
+  insertAuditLog,
+  attachDocumentToDocket,
+  updateDocumentRecord,
+} from '@/lib/repository';
+import { filterAndSearchDocuments, AdvancedSearchFilter } from '@/lib/searchEngine';
 
 interface AppContextType {
   currentUser: User;
   setCurrentUser: (user: User) => void;
+  isAuthenticated: boolean;
+  setIsAuthenticated: (auth: boolean) => void;
+  logout: () => void;
   documents: DocumentRecord[];
   setDocuments: React.Dispatch<React.SetStateAction<DocumentRecord[]>>;
   events: EventBooking[];
@@ -28,12 +44,32 @@ interface AppContextType {
   setSearchQuery: (query: string) => void;
   filterType: string;
   setFilterType: (type: string) => void;
+  filterCategory: string;
+  setFilterCategory: (category: string) => void;
   filterStatus: string;
   setFilterStatus: (status: string) => void;
+  filterPriority: string;
+  setFilterPriority: (priority: string) => void;
+  filterSla: string;
+  setFilterSla: (sla: string) => void;
+  filterOffice: string;
+  setFilterOffice: (office: string) => void;
+  dateFrom: string;
+  setDateFrom: (date: string) => void;
+  dateTo: string;
+  setDateTo: (date: string) => void;
+  hasAttachmentsFilter: string;
+  setHasAttachmentsFilter: (val: string) => void;
+  activeFilterCount: number;
+  resetAllFilters: () => void;
   selectedDoc: DocumentRecord | null;
   setSelectedDoc: (doc: DocumentRecord | null) => void;
   routingSlipDoc: DocumentRecord | null;
   setRoutingSlipDoc: (doc: DocumentRecord | null) => void;
+  wordPreviewDoc: DocumentRecord | null;
+  setWordPreviewDoc: (doc: DocumentRecord | null) => void;
+  prepareTargetDocId: string | null;
+  setPrepareTargetDocId: (id: string | null) => void;
   newIntakeOpen: boolean;
   setNewIntakeOpen: (open: boolean) => void;
   newEventOpen: boolean;
@@ -48,24 +84,107 @@ interface AppContextType {
   handleUpdateStatus: (docId: string, newStatus: DocumentStatus, note?: string) => void;
   handleAddNewDocument: (newDoc: DocumentRecord) => void;
   handleAddNewEvent: (newEvent: EventBooking) => void;
+  handleAttachDocument: (docId: string, attachment: Attachment) => void;
+  handleUpdateDocument: (doc: DocumentRecord) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(CURRENT_USERS[0]);
-  const [documents, setDocuments] = useState<DocumentRecord[]>(INITIAL_DOCUMENTS);
-  const [events, setEvents] = useState<EventBooking[]>(INITIAL_EVENTS);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(INITIAL_AUDIT_LOGS);
+  const [currentUser, setCurrentUser] = useState<User>(CLEAN_USERS[0]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [documents, setDocuments] = useState<DocumentRecord[]>(CLEAN_DOCUMENTS);
+  const [events, setEvents] = useState<EventBooking[]>(CLEAN_EVENTS);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(CLEAN_AUDIT_LOGS);
 
-  // Search & Filter
+  // Restore authenticated session and persisted records on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('docsys_session_user');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setCurrentUser(parsed);
+          setIsAuthenticated(true);
+        } catch {
+          // Keep default
+        }
+      }
+
+      // Load persisted records
+      fetchDocuments().then((docs) => setDocuments(docs));
+      fetchEvents().then((evts) => setEvents(evts));
+      fetchAuditLogs().then((logs) => setAuditLogs(logs));
+    }
+  }, []);
+
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('docsys_session_user');
+    }
+    setIsAuthenticated(false);
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  };
+
+  // Search & Multi-Parameter Filter Engine State
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [filterCategory, setFilterCategory] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterPriority, setFilterPriority] = useState<string>('ALL');
+  const [filterSla, setFilterSla] = useState<string>('ALL');
+  const [filterOffice, setFilterOffice] = useState<string>('ALL');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [hasAttachmentsFilter, setHasAttachmentsFilter] = useState<string>('ALL');
 
-  // Modals
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setFilterType('ALL');
+    setFilterCategory('ALL');
+    setFilterStatus('ALL');
+    setFilterPriority('ALL');
+    setFilterSla('ALL');
+    setFilterOffice('ALL');
+    setDateFrom('');
+    setDateTo('');
+    setHasAttachmentsFilter('ALL');
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim()) count++;
+    if (filterType !== 'ALL') count++;
+    if (filterCategory !== 'ALL') count++;
+    if (filterStatus !== 'ALL') count++;
+    if (filterPriority !== 'ALL') count++;
+    if (filterSla !== 'ALL') count++;
+    if (filterOffice !== 'ALL') count++;
+    if (dateFrom) count++;
+    if (dateTo) count++;
+    if (hasAttachmentsFilter !== 'ALL') count++;
+    return count;
+  }, [
+    searchQuery,
+    filterType,
+    filterCategory,
+    filterStatus,
+    filterPriority,
+    filterSla,
+    filterOffice,
+    dateFrom,
+    dateTo,
+    hasAttachmentsFilter,
+  ]);
+
+  // Modals & Navigation
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
   const [routingSlipDoc, setRoutingSlipDoc] = useState<DocumentRecord | null>(null);
+  const [wordPreviewDoc, setWordPreviewDoc] = useState<DocumentRecord | null>(null);
+  const [prepareTargetDocId, setPrepareTargetDocId] = useState<string | null>(null);
   const [newIntakeOpen, setNewIntakeOpen] = useState(false);
   const [newEventOpen, setNewEventOpen] = useState(false);
 
@@ -92,19 +211,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [documents]
   );
 
-  // Filtered Documents
+  // High-performance Parametric & Multi-token Filtered Documents
   const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const matchesSearch =
-        doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.controlNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.requestingParty.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.originOffice.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = filterType === 'ALL' || doc.type === filterType;
-      const matchesStatus = filterStatus === 'ALL' || doc.status === filterStatus;
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  }, [documents, searchQuery, filterType, filterStatus]);
+    const filter: AdvancedSearchFilter = {
+      query: searchQuery,
+      type: filterType,
+      category: filterCategory,
+      status: filterStatus,
+      priority: filterPriority,
+      slaStatus: filterSla,
+      originOffice: filterOffice,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      hasAttachments: hasAttachmentsFilter,
+    };
+    const scoredResults = filterAndSearchDocuments(documents, filter);
+    return scoredResults.map((r) => r.item);
+  }, [
+    documents,
+    searchQuery,
+    filterType,
+    filterCategory,
+    filterStatus,
+    filterPriority,
+    filterSla,
+    filterOffice,
+    dateFrom,
+    dateTo,
+    hasAttachmentsFilter,
+  ]);
 
   // Handlers
   const handleUpdateStatus = (docId: string, newStatus: DocumentStatus, note?: string) => {
@@ -143,6 +278,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       details: note || `Status updated to ${newStatus}`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    updateDocumentStatusInDb(docId, newStatus, note).catch((e) =>
+      console.warn('PostgreSQL update deferred:', e)
+    );
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
 
     if (selectedDoc && selectedDoc.id === docId) {
       setSelectedDoc((prev) =>
@@ -172,6 +311,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       details: `New document logged at reception desk. Control Number: ${newDoc.controlNumber}. Subject: ${newDoc.title}`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    insertDocument(newDoc).catch((e) => console.warn('PostgreSQL insert deferred:', e));
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
     setNewIntakeOpen(false);
   };
 
@@ -185,10 +326,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       userName: currentUser.fullName,
       userRole: currentUser.role,
       timestamp: new Date().toISOString(),
-      details: `Scheduled event: ${newEvent.title} at ${VENUE_LABELS[newEvent.venue].label} on ${newEvent.date} (${newEvent.startTime} - ${newEvent.endTime})`,
+      details: `Scheduled event: ${newEvent.title} at ${VENUE_LABELS[newEvent.venue]?.label || newEvent.venue} on ${newEvent.date} (${newEvent.startTime} - ${newEvent.endTime})`,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    insertEvent(newEvent).catch((e) => console.warn('PostgreSQL event insert deferred:', e));
+    insertAuditLog(newLog).catch((e) => console.warn('PostgreSQL audit log deferred:', e));
     setNewEventOpen(false);
+  };
+
+  const handleAttachDocument = (docId: string, attachment: Attachment) => {
+    setDocuments((prev) =>
+      prev.map((d) => {
+        if (d.id === docId) {
+          const updatedAttachments = [...(d.attachments || []), attachment];
+          return {
+            ...d,
+            attachments: updatedAttachments,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return d;
+      })
+    );
+
+    if (selectedDoc && selectedDoc.id === docId) {
+      setSelectedDoc((prev) =>
+        prev
+          ? {
+              ...prev,
+              attachments: [...(prev.attachments || []), attachment],
+              updatedAt: new Date().toISOString(),
+            }
+          : null
+      );
+    }
+
+    const newLog: AuditEntry = {
+      id: `AUD-${Date.now().toString().slice(-4)}`,
+      documentId: docId,
+      action: 'ASSIGNED',
+      userId: currentUser.id,
+      userName: currentUser.fullName,
+      userRole: currentUser.role,
+      timestamp: new Date().toISOString(),
+      details: `Attached official annex/record: "${attachment.fileName}" (${attachment.fileSize}) to docket.`,
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+
+    attachDocumentToDocket(docId, attachment, currentUser).catch((e) =>
+      console.warn('PostgreSQL attachment deferred:', e)
+    );
+  };
+
+  const handleUpdateDocument = (doc: DocumentRecord) => {
+    setDocuments((prev) => prev.map((d) => (d.id === doc.id ? doc : d)));
+    if (selectedDoc && selectedDoc.id === doc.id) {
+      setSelectedDoc(doc);
+    }
+    updateDocumentRecord(doc).catch((e) => console.warn('PostgreSQL doc update deferred:', e));
   };
 
   return (
@@ -196,6 +391,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentUser,
         setCurrentUser,
+        isAuthenticated,
+        setIsAuthenticated,
+        logout,
         documents,
         setDocuments,
         events,
@@ -205,12 +403,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         filterType,
         setFilterType,
+        filterCategory,
+        setFilterCategory,
         filterStatus,
         setFilterStatus,
+        filterPriority,
+        setFilterPriority,
+        filterSla,
+        setFilterSla,
+        filterOffice,
+        setFilterOffice,
+        dateFrom,
+        setDateFrom,
+        dateTo,
+        setDateTo,
+        hasAttachmentsFilter,
+        setHasAttachmentsFilter,
+        activeFilterCount,
+        resetAllFilters,
         selectedDoc,
         setSelectedDoc,
         routingSlipDoc,
         setRoutingSlipDoc,
+        wordPreviewDoc,
+        setWordPreviewDoc,
+        prepareTargetDocId,
+        setPrepareTargetDocId,
         newIntakeOpen,
         setNewIntakeOpen,
         newEventOpen,
@@ -225,6 +443,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         handleUpdateStatus,
         handleAddNewDocument,
         handleAddNewEvent,
+        handleAttachDocument,
+        handleUpdateDocument,
       }}
     >
       {children}

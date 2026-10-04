@@ -234,7 +234,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: #94A3B8;
 }
 
-/* Municipal Docket Ledger Table */
+/* Municipal Docket Ledger Table - Clean Minimalist Government Aesthetic */
 .municipal-docket-table {
   width: 100%;
   border-collapse: collapse;
@@ -243,21 +243,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .municipal-docket-table th {
-  background: var(--civic-primary-darker);
-  color: #F8FAFC;
+  background: #F8FAFC;
+  color: #475569;
   font-family: var(--font-sans), sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 2px solid var(--civic-primary);
+  border-bottom: 1px solid #E2E8F0;
 }
 
 .municipal-docket-table td {
   padding: 0.875rem 1rem;
-  border-bottom: 1px solid var(--neutral-200);
+  border-bottom: 1px solid #E2E8F0;
   vertical-align: middle;
 }
 
@@ -275,8 +275,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.2rem 0.5rem;
-  background: var(--civic-primary-darker);
-  color: #FFFFFF;
+  background: #F1F5F9;
+  color: #081E36;
+  border: 1px solid #CBD5E1;
   border-radius: 4px;
   display: inline-block;
   letter-spacing: 0.02em;
@@ -369,5 +370,116 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   }
   .hud-cell:last-child {
     border-bottom: none;
+  }
+}
+
+/* ========================================================================= */
+/* OFFICIAL PHILIPPINE GOVERNMENT PRINT STYLESHEET (MICROSOFT WORD FIDELITY) */
+/* ========================================================================= */
+.font-serif-word {
+  font-family: 'Times New Roman', Times, Georgia, serif;
+}
+
+@media print {
+  /* Set standard A4/Letter margins and background color */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 20mm 15mm 20mm;
+  }
+
+  html, body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    font-family: 'Times New Roman', Times, Georgia, serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Hide all web application chrome, navbars, sidebars, buttons, inputs, form toolbars */
+  header:not(.letterhead-header),
+  nav,
+  aside,
+  footer:not(.signatory-block),
+  button,
+  .no-print,
+  .app-layout-sidebar,
+  .gov-header,
+  .executive-operations-hud,
+  input,
+  textarea,
+  select {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Ensure modal containers containing printable sheets remain visible and non-blocking in print */
+  .printable-modal-container,
+  .modal-backdrop {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    inset: auto !important;
+  }
+
+  /* Strict visibility isolation: Only the printable sheet appears */
+  body * {
+    visibility: hidden;
+  }
+
+  .printable-word-document,
+  .printable-word-document *,
+  .printable-routing-slip,
+  .printable-routing-slip * {
+    visibility: visible !important;
+  }
+
+  /* Format the printable paper sheet to fit the physical page flawlessly */
+  .printable-word-document,
+  .printable-routing-slip {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+
+  /* Ensure text justification and spacing look identical to Word */
+  .document-provisions-body p {
+    text-align: justify !important;
+    line-height: 1.65 !important;
+    text-justify: inter-word !important;
+    page-break-inside: avoid !important;
+  }
+
+  .signatory-block {
+    page-break-inside: avoid !important;
+  }
+
+  .letterhead-header {
+    page-break-after: avoid !important;
+  }
+
+  /* Force color and image printing for official government seals */
+  img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

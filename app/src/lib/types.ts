@@ -3,15 +3,23 @@
 // Compliant with DICT GWTS v25.3.3, RA 11032 (3-day SLA), RA 10173, RA 8491, RA 10535
 
 export type DocumentType =
-  | 'INCOMING'
-  | 'TRAVEL_ORDER'
-  | 'VENUE_REQ'
-  | 'VEHICLE_REQ'
-  | 'FOOD_REQ'
-  | 'OVERTIME_REQ'
-  | 'ENDORSEMENT'
-  | 'PERMIT'
-  | 'LEGAL_OPINION'
+  | 'INCOMING'               // Incoming General Client Requests / Letters
+  | 'TRAVEL_ORDER'           // Official Travel Orders
+  | 'VENUE_REQ'              // Venue Reservations
+  | 'VEHICLE_REQ'            // Municipal Service Vehicle Requests
+  | 'FOOD_REQ'               // Food / Catering Support Requests
+  | 'OVERTIME_REQ'           // Overtime Work Authorizations
+  | 'EXECUTIVE_ORDER'        // Executive Orders by the Mayor
+  | 'CONTRACT_AGREEMENT'     // Contracts, MOAs, Legal Agreements
+  | 'SB_ENDORSEMENT'         // Sangguniang Bayan Endorsements
+  | 'MEMO_ORDER'             // Memorandum Orders & Directives
+  | 'CERTIFICATION_PERMIT'   // Certifications, Clearances & Permits
+  | 'LEGAL_ADVICE'           // Legal Opinions & Reviews
+  | 'COMMUNICATION_NATIONAL' // Communication for National Agencies
+  | 'ENDORSEMENT_LETTER'     // Endorsement Letters & Recommendations
+  | 'ENDORSEMENT'            // Legacy/Alias
+  | 'PERMIT'                 // Legacy/Alias
+  | 'LEGAL_OPINION'          // Legacy/Alias
   | 'OTHER';
 
 export type DocumentCategory =
@@ -83,6 +91,7 @@ export interface Attachment {
   fileType: string;
   uploadedBy: string;
   uploadedAt: string;
+  fileDataUrl?: string; // Real base64 / blob URL for inline viewing and offline download
 }
 
 export interface TransmissionRecord {
@@ -91,6 +100,7 @@ export interface TransmissionRecord {
   recipientName: string;
   receivedBy: string;
   proofDocumentUrl?: string;
+  proofDataUrl?: string; // Real base64 proof image / signed transmittal slip
   notes?: string;
 }
 
@@ -106,6 +116,7 @@ export interface DocumentRecord {
   assignedTo: string | null;
   status: DocumentStatus;
   scannedFileUrl: string | null;
+  scannedPages?: string[]; // Real digitized pages from camera or feeder
   attachments: Attachment[];
   draftContent?: string;
   draftDocumentUrl?: string | null;

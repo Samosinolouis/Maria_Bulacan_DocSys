@@ -81,16 +81,24 @@ export const VENUE_LABELS: Record<Venue, { label: string; capacity: number; loca
 };
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, { label: string; prefix: string; color: string }> = {
-  INCOMING: { label: 'General Incoming Request', prefix: 'IN', color: '#0B2545' },
+  INCOMING: { label: 'Incoming Request / Official Letter', prefix: 'IN', color: '#0B2545' },
   TRAVEL_ORDER: { label: 'Travel Order Request', prefix: 'TO', color: '#15803D' },
   VENUE_REQ: { label: 'Venue Reservation Request', prefix: 'VR', color: '#081E36' },
-  VEHICLE_REQ: { label: 'Vehicle Dispatch Request', prefix: 'VH', color: '#2563EB' },
-  FOOD_REQ: { label: 'Food and Catering Request', prefix: 'FD', color: '#9333EA' },
-  OVERTIME_REQ: { label: 'Overtime Authority Request', prefix: 'OT', color: '#334155' },
-  ENDORSEMENT: { label: 'Indorsement Request', prefix: 'IND', color: '#0D9488' },
-  PERMIT: { label: 'Permit and Clearance Endorsement', prefix: 'PM', color: '#4F46E5' },
-  LEGAL_OPINION: { label: 'Request for Legal Opinion', prefix: 'LO', color: '#7C3AED' },
-  OTHER: { label: 'Other Administrative Document', prefix: 'DOC', color: '#475569' },
+  VEHICLE_REQ: { label: 'Vehicle Service Request', prefix: 'VH', color: '#2563EB' },
+  FOOD_REQ: { label: 'Food & Catering Request', prefix: 'FD', color: '#4F46E5' },
+  OVERTIME_REQ: { label: 'Overtime Work Authorization', prefix: 'OT', color: '#334155' },
+  EXECUTIVE_ORDER: { label: 'Executive Order (Mayor)', prefix: 'EO', color: '#14532D' },
+  CONTRACT_AGREEMENT: { label: 'Contract and Agreement', prefix: 'CA', color: '#0F766E' },
+  SB_ENDORSEMENT: { label: 'Sangguniang Bayan Endorsement', prefix: 'SB', color: '#0D9488' },
+  MEMO_ORDER: { label: 'Memorandum Order', prefix: 'MO', color: '#1E293B' },
+  CERTIFICATION_PERMIT: { label: 'Certification and Permit', prefix: 'CP', color: '#0284C7' },
+  LEGAL_ADVICE: { label: 'Legal Advice & Opinion', prefix: 'LA', color: '#475569' },
+  COMMUNICATION_NATIONAL: { label: 'Communication for National Agencies', prefix: 'NAT', color: '#0369A1' },
+  ENDORSEMENT_LETTER: { label: 'Endorsement Letter & Recommendation', prefix: 'EL', color: '#047857' },
+  ENDORSEMENT: { label: '1st Indorsement Referral', prefix: 'IND', color: '#0D9488' },
+  PERMIT: { label: 'Permit & Clearance', prefix: 'PM', color: '#0284C7' },
+  LEGAL_OPINION: { label: 'Legal Opinion Request', prefix: 'LO', color: '#475569' },
+  OTHER: { label: 'Other Administrative Record', prefix: 'DOC', color: '#64748B' },
 };
 
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {

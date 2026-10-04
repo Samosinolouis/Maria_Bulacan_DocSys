@@ -1,0 +1,459 @@
+================================================================================
+MUNICIPALITY OF SANTA MARIA, BULACAN
+OFFICE OF THE MUNICIPAL ADMINISTRATOR
+DOCUMENT MANAGEMENT AND STATUTORY OPERATIONS SYSTEM (DOCSYS v2.6)
+ENTITY RELATIONSHIP DIAGRAM (ERD) AND RELATIONAL DATABASE SCHEMA SPECIFICATION
+================================================================================
+STATUTORY REFERENCE: Republic Act 11032 (Ease of Doing Business Act)
+GOVERNANCE STANDARD: DICT Philippine Government Web Template Standard (GWTS)
+DATA PRIVACY ACT: Republic Act 10173 Compliance
+DATE CREATED: 2026-10-01
+CLASSIFICATION: Official Civic Records Architecture
+
+
+================================================================================
+SECTION 1: HIGH-LEVEL ENTITY RELATIONSHIP ASCII DIAGRAM
+================================================================================
+
+       +------------------+
+       |      USERS       |<------------------------+
+       +------------------+                         |
+         | 1            | 1                         |
+         |              |                           |
+         | creates      | signs/approves            |
+         |              |                           |
+         v N            v N                         |
+       +--------------------+                       |
+       |     DOCUMENTS      |                       |
+       +--------------------+                       |
+         | 1       | 1      | 1                     |
+         |         |        |                       |
+         | has     | logged | dispatches            |
+         |         |        |                       |
+         v N       v N      v 1                     |
+   +-------------+ |   +---------------+            |
+   | ATTACHMENTS | |   | TRANSMISSIONS |            |
+   +-------------+ |   +---------------+            |
+                   |                                |
+                   v N                              |
+             +-------------+                        |
+             | AUDIT_LOGS  |------------------------+
+             +-------------+
+                   ^
+                   | logs
+                   |
+         +--------------------+
+         |   EVENT_BOOKINGS   |
+         +--------------------+
+           | N              | 1
+           |                |
+           | occupies       | has
+           |                |
+           v 1              v N
+       +--------+     +-----------------+
+       | VENUES |     | EVENT_ATTENDEES |
+       +--------+     +-----------------+
+
+       +--------------------+
+       | DOCUMENT_TEMPLATES |
+       +--------------------+
+
+
+================================================================================
+SECTION 2: RELATIONAL DETAILED ENTITY DIAGRAM
+================================================================================
+
++-------------------------------------------------------------------------------+
+|                                    USERS                                      |
++-------------------------------------------------------------------------------+
+| PK  id                     VARCHAR(36)      NOT NULL                          |
+|     full_name              VARCHAR(128)     NOT NULL                          |
+|     email                  VARCHAR(128)     NOT NULL UNIQUE                   |
+|     role                   VARCHAR(32)      NOT NULL                          |
+|     department             VARCHAR(64)      NOT NULL                          |
+|     title                  VARCHAR(64)      NOT NULL                          |
+|     is_active              BOOLEAN          NOT NULL DEFAULT TRUE             |
+|     created_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
+|     updated_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
++-------------------------------------------------------------------------------+
+       |                                                    |
+       | 1:N (created_by_user_id)                           | 1:N (assigned_to_user_id)
+       v                                                    v
++-------------------------------------------------------------------------------+
+|                                  DOCUMENTS                                    |
++-------------------------------------------------------------------------------+
+| PK  id                     VARCHAR(36)      NOT NULL                          |
+|     control_number         VARCHAR(32)      NOT NULL UNIQUE                   |
+|     type                   VARCHAR(32)      NOT NULL                          |
+|     category               VARCHAR(32)      NOT NULL                          |
+|     title                  VARCHAR(255)     NOT NULL                          |
+|     requesting_party       VARCHAR(128)     NOT NULL                          |
+|     origin_office          VARCHAR(128)     NOT NULL                          |
+|     date_received          TIMESTAMP WITH TIME ZONE NOT NULL                  |
+| FK  assigned_to_user_id    VARCHAR(36)      NULL                              |
+|     status                 VARCHAR(24)      NOT NULL DEFAULT 'RECEIVED'       |
+|     priority               VARCHAR(16)      NOT NULL DEFAULT 'NORMAL'         |
+|     sla_deadline           TIMESTAMP WITH TIME ZONE NOT NULL                  |
+|     is_overdue             BOOLEAN          NOT NULL DEFAULT FALSE            |
+|     denial_reason          TEXT             NULL                              |
+|     endorsement_notes      TEXT             NULL                              |
+| FK  created_by_user_id     VARCHAR(36)      NOT NULL                          |
+|     created_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
+|     updated_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
++-------------------------------------------------------------------------------+
+       |                      |                                |
+       | 1:N                  | 1:N                            | 1:1
+       v                      v                                v
++------------------+   +------------------+   +---------------------------------+
+|   ATTACHMENTS    |   |    AUDIT_LOGS    |   |          TRANSMISSIONS          |
++------------------+   +------------------+   +---------------------------------+
+| PK id            |   | PK id            |   | PK id                           |
+| FK document_id   |   | FK document_id   |   | FK document_id (UNIQUE)         |
+|    file_name     |   | FK event_id      |   |    transmitted_date             |
+|    file_url      |   |    action        |   |    transmitted_to_office        |
+|    file_size     |   | FK user_id       |   |    recipient_name               |
+|    file_type     |   |    user_name     |   |    received_by                  |
+|    uploaded_at   |   |    user_role     |   |    proof_document_url           |
++------------------+   |    timestamp     |   |    method                       |
+                       |    details       |   |    notes                        |
+                       |    hash_checksum |   |    created_at                   |
+                       +------------------+   +---------------------------------+
+                                ^
+                                | 1:N
+                                |
++-------------------------------------------------------------------------------+
+|                               EVENT_BOOKINGS                                  |
++-------------------------------------------------------------------------------+
+| PK  id                     VARCHAR(36)      NOT NULL                          |
+| FK  venue_id               VARCHAR(32)      NOT NULL                          |
+|     title                  VARCHAR(255)     NOT NULL                          |
+|     organizer              VARCHAR(128)     NOT NULL                          |
+|     department             VARCHAR(64)      NOT NULL                          |
+|     booking_date           DATE             NOT NULL                          |
+|     start_time             TIME             NOT NULL                          |
+|     end_time               TIME             NOT NULL                          |
+|     involves_mayor         BOOLEAN          NOT NULL DEFAULT FALSE            |
+|     involves_admin         BOOLEAN          NOT NULL DEFAULT FALSE            |
+|     status                 VARCHAR(20)      NOT NULL DEFAULT 'CONFIRMED'      |
+|     notes                  TEXT             NULL                              |
+| FK  created_by_user_id     VARCHAR(36)      NOT NULL                          |
+|     created_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
+|     updated_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
++-------------------------------------------------------------------------------+
+       |                                                    |
+       | N:1                                                | 1:N
+       v                                                    v
++-----------------------------------------------+   +---------------------------+
+|                    VENUES                     |   |      EVENT_ATTENDEES      |
++-----------------------------------------------+   +---------------------------+
+| PK  id                     VARCHAR(32)        |   | PK id         VARCHAR(36) |
+|     code                   VARCHAR(32) UNIQUE |   | FK event_id   VARCHAR(36) |
+|     name                   VARCHAR(128)       |   |    full_name  VARCHAR(128)|
+|     location               VARCHAR(128)       |   |    role_title VARCHAR(64) |
+|     capacity               INT                |   +---------------------------+
+|     is_active              BOOLEAN            |
++-----------------------------------------------+
+
++-------------------------------------------------------------------------------+
+|                              DOCUMENT_TEMPLATES                               |
++-------------------------------------------------------------------------------+
+| PK  id                     VARCHAR(36)      NOT NULL                          |
+|     code                   VARCHAR(32)      NOT NULL UNIQUE                   |
+|     title                  VARCHAR(128)     NOT NULL                          |
+|     category               VARCHAR(32)      NOT NULL                          |
+|     description            TEXT             NOT NULL                          |
+|     template_body_schema   JSONB            NOT NULL                          |
+|     is_active              BOOLEAN          NOT NULL DEFAULT TRUE             |
+|     created_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()    |
++-------------------------------------------------------------------------------+
+
+
+================================================================================
+SECTION 3: COMPLETE TABLE SCHEMAS & ATTRIBUTES
+================================================================================
+
+TABLE 1: users
+Description: Municipal personnel authorized to operate DOCSYS under role-based access control.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+full_name            | VARCHAR(128)    | NO       | Civic employee full name
+email                | VARCHAR(128)    | NO       | UNIQUE, Validated email format
+role                 | VARCHAR(32)     | NO       | CHECK IN ('MAYOR', 'MUNICIPAL_ADMIN',
+                     |                 |          | 'ADMIN_OFFICER_V', 'SENIOR_RECORDS_OFFICER',
+                     |                 |          | 'INTAKE_CLERK')
+department           | VARCHAR(64)     | NO       | Office attribution (e.g. MAYORS_OFFICE)
+title                | VARCHAR(64)     | NO       | Official Civil Service plantilla title
+is_active            | BOOLEAN         | NO       | DEFAULT TRUE
+created_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+updated_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_users_email UNIQUE (email)
+- idx_users_role (role)
+- idx_users_department (department)
+
+
+TABLE 2: documents
+Description: Core municipal docket records subject to RA 11032 statutory 72-hour turnaround.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+control_number       | VARCHAR(32)     | NO       | UNIQUE, Format: [TYPE]-[YEAR]-[SEQ]
+type                 | VARCHAR(32)     | NO       | CHECK IN ('TRAVEL_ORDER', 'EXECUTIVE_ORDER',
+                     |                 |          | 'INDORSEMENT', 'VENUE_REQUEST',
+                     |                 |          | 'OVERTIME_AUTHORITY', 'LEGAL_OPINION',
+                     |                 |          | 'MEMORANDUM', 'CITIZEN_REQUEST')
+category             | VARCHAR(32)     | NO       | CHECK IN ('ADMINISTRATIVE', 'LEGISLATIVE',
+                     |                 |          | 'EXECUTIVE', 'LEGAL', 'FINANCIAL',
+                     |                 |          | 'PERSONNEL', 'PUBLIC_AFFAIRS')
+title                | VARCHAR(255)    | NO       | Formal subject matter / docket description
+requesting_party     | VARCHAR(128)    | NO       | Citizen or official requesting transaction
+origin_office        | VARCHAR(128)    | NO       | Originating department or exterior entity
+date_received        | TIMESTAMPTZ     | NO       | Intake date timestamp
+assigned_to_user_id  | VARCHAR(36)     | YES      | FOREIGN KEY REFERENCES users(id) ON DELETE SET NULL
+status               | VARCHAR(24)     | NO       | CHECK IN ('RECEIVED', 'SCREENING',
+                     |                 |          | 'PREPARATION', 'REVIEW', 'APPROVED',
+                     |                 |          | 'ENDORSED', 'DENIED', 'TRANSMITTED',
+                     |                 |          | 'CLOSED') DEFAULT 'RECEIVED'
+priority             | VARCHAR(16)     | NO       | CHECK IN ('NORMAL', 'HIGH', 'URGENT') DEFAULT 'NORMAL'
+sla_deadline         | TIMESTAMPTZ     | NO       | RA 11032 deadline (date_received + 72 hours)
+is_overdue           | BOOLEAN         | NO       | DEFAULT FALSE (Computed or cron updated)
+denial_reason        | TEXT            | YES      | Required if status = 'DENIED'
+endorsement_notes    | TEXT            | YES      | Executive directives upon endorsement
+created_by_user_id   | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES users(id)
+created_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+updated_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_documents_control_num UNIQUE (control_number)
+- idx_documents_status (status)
+- idx_documents_sla (sla_deadline, is_overdue)
+- idx_documents_assigned (assigned_to_user_id)
+- idx_documents_date_received (date_received DESC)
+
+
+TABLE 3: attachments
+Description: Scanned physical substrates, annexes, and supporting documentary requirements.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+document_id          | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES documents(id) ON DELETE CASCADE
+file_name            | VARCHAR(255)    | NO       | Original file name with extension
+file_url             | VARCHAR(512)    | NO       | Secure Azure Blob / S3 storage URI
+file_size            | BIGINT          | NO       | Size in bytes
+file_type            | VARCHAR(64)     | NO       | MIME type (e.g. application/pdf, image/png)
+uploaded_by_user_id  | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES users(id)
+uploaded_at          | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_attachments_doc_id (document_id)
+
+
+TABLE 4: transmissions
+Description: Official transmittal ledger for outgoing documents dispatched to recipient offices.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+document_id          | VARCHAR(36)     | NO       | UNIQUE, FOREIGN KEY REFERENCES documents(id) ON DELETE CASCADE
+transmitted_date     | TIMESTAMPTZ     | NO       | Dispatch timestamp
+transmitted_to_office| VARCHAR(128)    | NO       | Destination agency or municipal division
+recipient_name       | VARCHAR(128)    | NO       | Receiving liaison or citizen recipient
+received_by          | VARCHAR(128)    | YES      | Clerk who acknowledged receipt
+proof_document_url   | VARCHAR(512)    | YES      | Scanned transmittal receipt with stamp
+method               | VARCHAR(32)     | NO       | CHECK IN ('PHYSICAL_COURIER', 'IN_PERSON_PICKUP',
+                     |                 |          | 'OFFICIAL_EMAIL', 'PORTAL_DISPATCH')
+notes                | TEXT            | YES      | Transmission remarks
+created_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_transmissions_doc_id UNIQUE (document_id)
+- idx_transmissions_date (transmitted_date DESC)
+
+
+TABLE 5: venues
+Description: Fixed inventory of six official municipal venues in Santa Maria, Bulacan.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(32)     | NO       | PRIMARY KEY (e.g. 'CONFERENCE_ROOM')
+code                 | VARCHAR(32)     | NO       | UNIQUE abbreviation (e.g. 'CONF_RM_A')
+name                 | VARCHAR(128)    | NO       | Facility title (e.g. 'Municipal Conference Room')
+location             | VARCHAR(128)    | NO       | Physical location within municipal compound
+capacity             | INT             | NO       | Maximum seating capacity (CHECK > 0)
+is_active            | BOOLEAN         | NO       | DEFAULT TRUE
+
+Seed Values:
+1. CONFERENCE_ROOM    | Municipal Conference Room         | 2nd Floor, Municipal Hall    | Cap: 30
+2. SESSION_HALL       | Sangguniang Bayan Session Hall    | Legislative Wing, 2nd Floor  | Cap: 80
+3. GYMNASIUM          | Municipal Gymnasium               | Santa Maria Sports Complex   | Cap: 1500
+4. COMMAND_CENTER     | MDRRMO Command Center             | Ground Floor, Disaster Bldg  | Cap: 25
+5. SOCIAL_HALL        | Municipal Social Hall             | 3rd Floor, Executive Wing    | Cap: 200
+6. PLAZA_STAGE        | Santa Maria Town Plaza Stage      | Municipal Grounds, Exterior  | Cap: 500
+
+
+TABLE 6: event_bookings
+Description: Conflict-free reservation calendar for municipal venues and executive gavels.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+venue_id             | VARCHAR(32)     | NO       | FOREIGN KEY REFERENCES venues(id) ON DELETE RESTRICT
+title                | VARCHAR(255)    | NO       | Official event or hearing title
+organizer            | VARCHAR(128)    | NO       | Lead official or presiding officer
+department           | VARCHAR(64)     | NO       | Organizing municipal department
+booking_date         | DATE            | NO       | Event date (YYYY-MM-DD)
+start_time           | TIME            | NO       | Event commencement (CHECK < end_time)
+end_time             | TIME            | NO       | Event conclusion
+involves_mayor       | BOOLEAN         | NO       | DEFAULT FALSE (Flags Mayoral gavel presence)
+involves_admin       | BOOLEAN         | NO       | DEFAULT FALSE (Flags Municipal Admin presence)
+status               | VARCHAR(20)     | NO       | CHECK IN ('CONFIRMED', 'TENTATIVE', 'CANCELLED')
+                     |                 |          | DEFAULT 'CONFIRMED'
+notes                | TEXT            | YES      | Logistics and sound requirements
+created_by_user_id   | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES users(id)
+created_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+updated_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_bookings_conflict (venue_id, booking_date, start_time, end_time, status)
+- idx_bookings_date (booking_date)
+
+
+TABLE 7: event_attendees
+Description: Roster of confirmed attendees and dignitaries for municipal gavel events.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+event_id             | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES event_bookings(id) ON DELETE CASCADE
+full_name            | VARCHAR(128)    | NO       | Attendee full name
+role_title           | VARCHAR(64)     | YES      | Designation (e.g. 'Presiding Officer')
+
+Indexes:
+- idx_event_attendees_event (event_id)
+
+
+TABLE 8: audit_logs
+Description: Tamper-evident chronological statutory audit trail of all transactions and mutations.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (e.g. AUD-[TIMESTAMP])
+document_id          | VARCHAR(36)     | YES      | FOREIGN KEY REFERENCES documents(id) ON DELETE SET NULL
+event_id             | VARCHAR(36)     | YES      | FOREIGN KEY REFERENCES event_bookings(id) ON DELETE SET NULL
+action               | VARCHAR(32)     | NO       | CHECK IN ('RECEIVED', 'SCREENED',
+                     |                 |          | 'PREPARED', 'REVIEWED', 'APPROVED',
+                     |                 |          | 'ENDORSED', 'DENIED', 'TRANSMITTED',
+                     |                 |          | 'ARCHIVED', 'SCHEDULED_EVENT', 'UPDATED')
+user_id              | VARCHAR(36)     | NO       | FOREIGN KEY REFERENCES users(id)
+user_name            | VARCHAR(128)    | NO       | Name snapshot at time of mutation
+user_role            | VARCHAR(32)     | NO       | Role snapshot at time of mutation
+timestamp            | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP (Immutable)
+details              | TEXT            | NO       | Narrative description of state change
+hash_checksum        | VARCHAR(64)     | YES      | SHA-256 fingerprint for tamper-evidence
+
+Indexes:
+- idx_audit_doc_id (document_id, timestamp DESC)
+- idx_audit_timestamp (timestamp DESC)
+- idx_audit_user (user_id)
+
+
+TABLE 9: document_templates
+Description: Standard municipal drafting templates for executive orders, indorsements, and travel.
+------------------------------------------------------------------------------------------------
+Column Name          | Data Type       | Nullable | Constraints / Defaults
+---------------------+-----------------+----------+---------------------------------------------
+id                   | VARCHAR(36)     | NO       | PRIMARY KEY (UUID v4)
+code                 | VARCHAR(32)     | NO       | UNIQUE code (e.g. 'TO-LGU-2026')
+title                | VARCHAR(128)    | NO       | Template display title
+category             | VARCHAR(32)     | NO       | CHECK IN ('ADMINISTRATIVE', 'LEGISLATIVE', 'EXECUTIVE')
+description          | TEXT            | NO       | Purpose of statutory template
+template_body_schema | JSONB           | NO       | JSON structured template fields and default text
+is_active            | BOOLEAN         | NO       | DEFAULT TRUE
+created_at           | TIMESTAMPTZ     | NO       | DEFAULT CURRENT_TIMESTAMP
+
+Indexes:
+- idx_templates_code UNIQUE (code)
+
+
+================================================================================
+SECTION 4: CARDINALITY MATRIX & INTEGRITY RELATIONSHIPS
+================================================================================
+
+1. users -> documents (created_by_user_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Mandatory FK. A document must have an authoring clerk.
+   - Deletion: RESTRICT. A user who logged active documents cannot be hard-deleted.
+
+2. users -> documents (assigned_to_user_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Optional FK. Document can be assigned to a specific officer for drafting/review.
+   - Deletion: SET NULL.
+
+3. documents -> attachments (document_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Mandatory FK. Every attachment belongs to exactly one docket.
+   - Deletion: CASCADE. Archiving/deleting document purges attachment metadata.
+
+4. documents -> transmissions (document_id)
+   - Cardinality: One to One (1:1)
+   - Enforcement: UNIQUE FK. A document possesses at most one active outward transmittal record.
+   - Deletion: CASCADE.
+
+5. venues -> event_bookings (venue_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Mandatory FK.
+   - Deletion: RESTRICT. Active municipal venues cannot be deleted while reservations exist.
+
+6. event_bookings -> event_attendees (event_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Mandatory FK.
+   - Deletion: CASCADE. Deleting an event deletes attendee entries.
+
+7. documents -> audit_logs (document_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Optional FK. Audit log persists even if document record is archived.
+   - Deletion: SET NULL. Preserves immutable history.
+
+8. users -> audit_logs (user_id)
+   - Cardinality: One to Many (1:N)
+   - Enforcement: Mandatory FK.
+   - Deletion: RESTRICT. Preserves statutory chain of custody.
+
+
+================================================================================
+SECTION 5: ARTA RA 11032 STATUTORY RULES & CONSTRAINTS
+================================================================================
+
+1. 72-Hour Turnaround Rule (Section 21, RA 11032):
+   - Simple transactions must be completed within 3 working days (72 hours).
+   - Complex transactions: up to 7 working days.
+   - Highly technical transactions: up to 20 working days.
+   - sla_deadline = date_received + INTERVAL '72 hours'
+   - If (CURRENT_TIMESTAMP > sla_deadline AND status NOT IN ('APPROVED', 'ENDORSED', 'DENIED', 'CLOSED')):
+       is_overdue = TRUE
+       Escalation notification dispatched to Municipal Administrator dashboard.
+
+2. Double-Booking Prevention Rule (Venues):
+   - A new booking with status 'CONFIRMED' cannot overlap with an existing 'CONFIRMED'
+     booking for the same venue_id on the same booking_date:
+     NOT EXISTS (
+       SELECT 1 FROM event_bookings e
+       WHERE e.venue_id = NEW.venue_id
+         AND e.booking_date = NEW.booking_date
+         AND e.status = 'CONFIRMED'
+         AND e.id != NEW.id
+         AND (NEW.start_time < e.end_time AND NEW.end_time > e.start_time)
+     )
+
+3. Finite State Lifecycle Transitions:
+   RECEIVED -> SCREENING -> PREPARATION -> REVIEW -> APPROVED / ENDORSED / DENIED -> TRANSMITTED -> CLOSED
+   - Any status change triggers an automatic, unalterable insertion into audit_logs.
+
+================================================================================
+END OF SCHEME.TXT
+================================================================================

@@ -1,0 +1,37 @@
+erDiagram
+    USERS ||--o{ AUDIT_LOGS : "performs_action (1:N user_id)"
+    DOCUMENTS |o--o{ AUDIT_LOGS : "subject_of_custody (0..1:N document_id)"
+    EVENT_BOOKINGS |o--o{ AUDIT_LOGS : "subject_of_scheduling (0..1:N event_id)"
+
+    USERS {
+        string id PK "User UUID"
+        string full_name "Actor full name"
+        string role "Actor plantilla role"
+        string department "Actor department"
+    }
+
+    DOCUMENTS {
+        string id PK "Document UUID"
+        string control_number UK "Docket number"
+        string title "Docket subject matter"
+        string status "Current workflow state"
+    }
+
+    EVENT_BOOKINGS {
+        string id PK "Booking UUID"
+        string title "Event title"
+        date booking_date "Booking date"
+    }
+
+    AUDIT_LOGS {
+        string id PK "Log UUID"
+        string document_id FK "Document UUID (ON DELETE SET NULL)"
+        string event_id FK "Event booking UUID (ON DELETE SET NULL)"
+        string action "RECEIVED | SCREENED | PREPARED | REVIEWED | APPROVED | ENDORSED | DENIED | TRANSMITTED | ARCHIVED | SCHEDULED_EVENT | UPDATED"
+        string user_id FK "Actor user UUID (ON DELETE RESTRICT)"
+        string user_name "Snapshot of actor name at time of event"
+        string user_role "Snapshot of actor role at time of event"
+        timestamptz timestamp "Tamper-evident timestamp"
+        text details "Comprehensive statutory narrative"
+        string hash_checksum "SHA-256 cryptographic integrity hash"
+    }

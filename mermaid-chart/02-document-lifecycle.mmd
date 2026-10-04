@@ -1,0 +1,60 @@
+erDiagram
+    DOCUMENTS ||--o{ ATTACHMENTS : "has_annexes (1:N)"
+    DOCUMENTS ||--o| TRANSMISSIONS : "dispatches_to (1:0..1)"
+    DOCUMENT_TEMPLATES ||--o{ DOCUMENTS : "standardizes (1:N)"
+
+    DOCUMENTS {
+        string id PK "UUID"
+        string control_number UK "Format: SM-YYYY-MM-XXXX"
+        string type "TRAVEL_ORDER | EXECUTIVE_ORDER | INDORSEMENT | VENUE_REQUEST | OVERTIME_AUTHORITY | LEGAL_OPINION | MEMORANDUM | CITIZEN_REQUEST"
+        string category "ADMINISTRATIVE | LEGISLATIVE | EXECUTIVE | LEGAL | FINANCIAL | PERSONNEL | PUBLIC_AFFAIRS"
+        string title "Docket subject matter"
+        string requesting_party "Citizen or requesting office"
+        string origin_office "Originating bureau or LGU office"
+        timestamptz date_received "Formal receipt timestamp"
+        string assigned_to_user_id FK "Assigned desk officer"
+        string status "RECEIVED | SCREENING | PREPARATION | REVIEW | APPROVED | ENDORSED | DENIED | TRANSMITTED | CLOSED"
+        string priority "NORMAL | HIGH | URGENT"
+        timestamptz sla_deadline "RA 11032 SLA deadline"
+        boolean is_overdue "Overdue alert flag"
+        text denial_reason "Mandatory if status is DENIED"
+        text endorsement_notes "Notes or instructions if ENDORSED"
+        string created_by_user_id FK "Intake officer UUID"
+        timestamptz created_at "Registration timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    ATTACHMENTS {
+        string id PK "UUID"
+        string document_id FK "Document UUID (ON DELETE CASCADE)"
+        string file_name "Original document filename"
+        string file_url "Storage URL or data URI"
+        bigint file_size "File payload size in bytes"
+        string file_type "MIME type (PDF, PNG, etc.)"
+        string uploaded_by_user_id FK "Uploader UUID"
+        timestamptz uploaded_at "Upload timestamp"
+    }
+
+    TRANSMISSIONS {
+        string id PK "UUID"
+        string document_id FK "Document UUID (1:1 UNIQUE, ON DELETE CASCADE)"
+        timestamptz transmitted_date "Dispatch timestamp"
+        string transmitted_to_office "Destination department or external agency"
+        string recipient_name "Designated receiving officer"
+        string received_by "Actual receiving clerk name"
+        string proof_document_url "Scan of signed receiving slip"
+        string method "PHYSICAL_COURIER | IN_PERSON_PICKUP | OFFICIAL_EMAIL | PORTAL_DISPATCH"
+        text notes "Routing or delivery instructions"
+        timestamptz created_at "Record creation timestamp"
+    }
+
+    DOCUMENT_TEMPLATES {
+        string id PK "UUID"
+        string code UK "e.g. TO-STD, EO-STD, IND-01"
+        string title "Official template display title"
+        string category "Classification category"
+        text description "Usage purpose and guidelines"
+        jsonb template_body_schema "Structured form schema & fields"
+        boolean is_active "Template active flag"
+        timestamptz created_at "Registration timestamp"
+    }

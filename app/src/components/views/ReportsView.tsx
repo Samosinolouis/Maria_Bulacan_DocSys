@@ -62,42 +62,44 @@ export default function ReportsView() {
         <h4 className="font-bold text-xs uppercase tracking-wider text-[#081E36] mb-3">
           Monthly Document Processing Summary by Category
         </h4>
-        <table className="municipal-docket-table">
-          <thead>
-            <tr>
-              <th>Statutory Category</th>
-              <th>Received</th>
-              <th>Approved</th>
-              <th>Denied</th>
-              <th>Archived</th>
-              <th>Compliance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([catKey, label]) => {
-              const total = documents.filter((d) => d.category === catKey).length;
-              const app = documents.filter(
-                (d) => d.category === catKey && (d.status === 'APPROVED' || d.status === 'ENDORSED')
-              ).length;
-              const den = documents.filter((d) => d.category === catKey && d.status === 'DENIED').length;
-              const cl = documents.filter((d) => d.category === catKey && d.status === 'CLOSED').length;
-              return (
-                <tr key={catKey}>
-                  <td className="font-bold text-[#081E36]">{label}</td>
-                  <td className="font-mono">{total}</td>
-                  <td className="font-mono text-[#15803D]">{app}</td>
-                  <td className="font-mono text-[#475569]">{den}</td>
-                  <td className="font-mono text-[#475569]">{cl}</td>
-                  <td>
-                    <span className="font-mono text-xs font-bold text-[#15803D]">
-                      100% Compliant
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="municipal-docket-table">
+            <thead>
+              <tr>
+                <th>Statutory Category</th>
+                <th>Received</th>
+                <th>Approved</th>
+                <th>Denied</th>
+                <th>Archived</th>
+                <th>Compliance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([catKey, label]) => {
+                const total = documents.filter((d) => d.category === catKey).length;
+                const app = documents.filter(
+                  (d) => d.category === catKey && (d.status === 'APPROVED' || d.status === 'ENDORSED')
+                ).length;
+                const den = documents.filter((d) => d.category === catKey && d.status === 'DENIED').length;
+                const cl = documents.filter((d) => d.category === catKey && d.status === 'CLOSED').length;
+                return (
+                  <tr key={catKey}>
+                    <td className="font-bold text-[#081E36]">{label}</td>
+                    <td className="font-mono">{total}</td>
+                    <td className="font-mono text-[#15803D]">{app}</td>
+                    <td className="font-mono text-[#475569]">{den}</td>
+                    <td className="font-mono text-[#475569]">{cl}</td>
+                    <td>
+                      <span className="font-mono text-xs font-bold text-[#15803D]">
+                        100% Compliant
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
