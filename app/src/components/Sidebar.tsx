@@ -12,7 +12,6 @@ import {
   Archive,
   Calendar,
   BarChart3,
-  ShieldAlert,
   Settings,
   X,
   PanelLeftClose,
@@ -58,8 +57,11 @@ export default function Sidebar({
   const canPrepareDocuments = useCan('DocumentService:Prepare');
   const canEncodeRequests = useCan('RequestService:Encode');
   const canReadVenues = useCan('VenueService:Read');
-  // The configuration desk needs at least one maintenance grant.
-  const canConfigure = canPrepareDocuments || canEncodeRequests || canReadReports || canReadVenues;
+  // The configuration desk needs at least one maintenance grant. User and role
+  // administration lives in Settings > User Management, so UserService:Read
+  // alone must still surface the entry.
+  const canConfigure =
+    canPrepareDocuments || canEncodeRequests || canReadReports || canReadVenues || canReadUsers;
 
   const [internalCollapsed, setInternalCollapsed] = useState(false);
 
@@ -194,16 +196,6 @@ export default function Sidebar({
           count: null as number | null,
           alert: false,
           visible: canReadReports,
-        },
-        {
-          id: 'admin',
-          href: '/admin',
-          label: 'Statutory Audit Trail',
-          subLabel: 'Immutable chain of custody',
-          icon: ShieldAlert,
-          count: null as number | null,
-          alert: false,
-          visible: canReadUsers,
         },
       ],
     },

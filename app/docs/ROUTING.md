@@ -37,7 +37,7 @@ app/src/app/
 ├── archive/page.tsx     # "/archive" -> ArchiveView
 ├── schedule/page.tsx    # "/schedule" -> ScheduleView
 ├── reports/page.tsx     # "/reports" -> ReportsView
-└── admin/page.tsx       # "/admin" -> AdminView
+└── settings/page.tsx    # "/settings" -> SettingsView
 ```
 
 A page file is a one-liner wrapper:
@@ -58,7 +58,7 @@ export default function ReviewPage() {
 | Route | View | Purpose | Access |
 | ----- | ---- | ------- | ------ |
 | `/` | `DashboardView` | Executive dashboard (same as `/dashboard`) | Session required |
-| `/login` | Login flow | Starts the Keycloak OIDC redirect | Public |
+| `/login` | Login flow | Hands the browser straight to the Keycloak authorization endpoint; no form or button | Public |
 | `/auth/callback` | Login flow | Completes the OIDC exchange, then redirects to the return path | Public |
 | `/dashboard` | `DashboardView` | Workload HUD, SLA state, docket ledger | Session + `ReportService:Read` for metrics |
 | `/incoming` | `IncomingView` | Reception and screening queue | Session; actions gate on `RequestService:Encode` / `RequestService:Screen` |
@@ -68,7 +68,7 @@ export default function ReviewPage() {
 | `/archive` | `ArchiveView` | Closed records and retrieval | Session; gated on `RequestService:Read` / `DocumentService:Read` |
 | `/schedule` | `ScheduleView` | Venue and event calendar | Session; actions gate on `EventService:*` |
 | `/reports` | `ReportsView` | ARTA compliance ledger and exports | Session; gated on `ReportService:Read` / `ReportService:Export` |
-| `/admin` | `AdminView` | Users, roles, audit trail | Session; gated on `UserService:*` / `RoleService:*` |
+| `/settings` | `SettingsView` | Reference data, venues, holidays, users, roles | Session; tabs gate on `DocumentService:Prepare` / `RequestService:Encode` / `VenueService:*` / `ReportService:Read` / `UserService:Read` |
 
 Detail views are modals, not routes. `DocumentDetailModal`, `RoutingSlipModal`, and `OfficialWordDocument` open over the current route from the owning view. This keeps the static export simple and matches the current interaction design. If deep-linkable detail pages become a requirement, add dynamic segments (`/incoming/[requestId]`) with `generateStaticParams`; do not convert the modal flow wholesale.
 

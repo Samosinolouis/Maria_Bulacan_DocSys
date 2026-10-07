@@ -338,7 +338,7 @@ Migration order:
 1. Approve [SERVICE_CONTRACTS.md](./SERVICE_CONTRACTS.md).
 2. Implement the cross-cutting ports: GraphQL client, session service, authorization engine, client cache.
 3. Implement contract services in domain order: session and authz first, then `LookupService`, `RequestService`, `DocumentService`, `AttachmentService`, then booking (`VenueService`, `EventService`), then `NotificationService`, `UserService`, `RoleService`, `ReportService`.
-4. Add hooks per screen and rewire views one route at a time: `/dashboard`, `/incoming`, `/review`, `/prepare`, `/transmit`, `/schedule`, `/archive`, `/reports`, `/admin`, `/login`.
+4. Add hooks per screen and rewire views one route at a time: `/dashboard`, `/incoming`, `/review`, `/prepare`, `/transmit`, `/schedule`, `/archive`, `/reports`, `/settings`, `/login`.
 5. Retire `AppContext`, `repository.ts`, and the fixture data paths. Keep mock implementations for tests.
 
 ---

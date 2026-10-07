@@ -76,7 +76,7 @@ One view per route, under `app/src/components/views/`:
 | `ArchiveView` | `/archive` | Closed records, search, dossier retrieval |
 | `ScheduleView` | `/schedule` | Venue calendar, conflict detection, event CRUD |
 | `ReportsView` | `/reports` | ARTA metrics, category summaries, exports |
-| `AdminView` | `/admin` | Users, roles, permission catalog, audit trail |
+| `SettingsView` | `/settings` | Reference data, venues, holidays, user and role administration |
 
 During the restructure, views are rewired from `useApp()` to data hooks. Their props and layout stay as they are; only the data source changes.
 
