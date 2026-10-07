@@ -4,6 +4,7 @@
   "displayName": "Santa Maria Bulacan DMS",
   "displayNameHtml": "<strong>Santa Maria Bulacan</strong> Document Management System",
   "sslRequired": "none",
+  "loginTheme": "keycloack-idp-docsys",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
@@ -50,7 +51,8 @@
       "directAccessGrantsEnabled": true,
       "consentRequired": false,
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
       },
       "redirectUris": ["http://localhost:3000/*"],
       "webOrigins": ["http://localhost:3000"]

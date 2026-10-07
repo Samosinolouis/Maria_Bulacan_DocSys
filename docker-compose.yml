@@ -73,6 +73,18 @@ services:
       - "${KEYCLOAK_PORT:-8080}:8080"
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Keycloakify login theme. Build it first:
+      #   cd keycloack-idp-docsys && npm run build-keycloak-theme:docsys
+      # That leaves only the Keycloak 26 artifact (keycloak-theme-for-kc-all-other-versions.jar)
+      # in dist_keycloak/. The whole directory is mounted as Keycloak's providers
+      # dir, so an unbuilt checkout just has no theme (Docker creates an empty
+      # directory) rather than failing. Mounting the single .jar file instead
+      # would make Docker create a DIRECTORY at that path on a fresh clone, which
+      # then blocks `keycloakify build` from writing the jar.
+      # REBUILD WITH KEYCLOAK STOPPED (`docker compose stop keycloak`): while the
+      # container runs it holds the mounted jar open and Windows refuses the
+      # rename into dist_keycloak with EPERM. Then `docker compose up -d keycloak`.
+      - ./keycloack-idp-docsys/dist_keycloak:/opt/keycloak/providers:ro
     depends_on:
       postgres:
         condition: service_healthy
