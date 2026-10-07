@@ -1,0 +1,141 @@
+# ============================================================
+# Santa Maria Bulacan DMS — Local backend infrastructure
+#
+#   docker compose up -d
+#
+# Provisions the three external resources the API depends on:
+#   * PostgreSQL  — single database `docsys`
+#                    - `app`    schema  -> the API (Drizzle migrations)
+#                    - `public` schema  -> Keycloak (its default)
+#   * Keycloak    — OIDC identity provider (realm `docsys` auto-imported)
+#   * MinIO       — S3-compatible object storage for all uploaded files
+#
+# Override any default by copying `.env.docker.example` to `.env.docker`
+# and running:  docker compose --env-file .env.docker up -d
+# ============================================================
+
+name: maria-bulacan-docsys
+
+services:
+  # ----------------------------------------------------------
+  # PostgreSQL — API tables in `app`, Keycloak tables in `public`
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: docsys-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-docsys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docsys_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-docsys}
+      # Deterministic collation keeps ORDER BY stable across hosts.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Runs once, on first init: creates the `app` schema.
+      - ./infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docsys} -d ${POSTGRES_DB:-docsys}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - docsys
+
+  # ----------------------------------------------------------
+  # Keycloak — OIDC; stores its own tables in the `public` schema
+  # ----------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: docsys-keycloak
+    restart: unless-stopped
+    # start-dev = HTTP + no hostname strictness (local only).
+    # --import-realm imports infra/keycloak/*.json on first boot.
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-docsys}
+      KC_DB_USERNAME: ${POSTGRES_USER:-docsys}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-docsys_dev_pw}
+      # Keycloak owns the default schema; the API owns `app`.
+      KC_DB_SCHEMA: public
+      # Bootstrap admin (Keycloak 26 variable names).
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - docsys
+
+  # ----------------------------------------------------------
+  # MinIO — S3-compatible object storage (API + console)
+  # ----------------------------------------------------------
+  # NOTE: MinIO dropped its Docker Hub (`minio/minio`) and anonymous quay.io
+  # images in late 2026. `elestio/minio` republishes the identical upstream
+  # MinIO server (RELEASE.2025-09-07T16-13-09Z) and bundles the `mc` client.
+  minio:
+    image: elestio/minio:latest
+    container_name: docsys-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_REGION_NAME: ${MINIO_REGION:-us-east-1}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"     # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - docsys
+
+  # ----------------------------------------------------------
+  # One-shot: create the attachments bucket, then exit.
+  # Reuses the MinIO image (it bundles `mc`) — no extra image needed.
+  # ----------------------------------------------------------
+  minio-init:
+    image: elestio/minio:latest
+    container_name: docsys-minio-init
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-docsys-attachments}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "local/$$MINIO_BUCKET"
+        echo "MinIO bucket '$$MINIO_BUCKET' ready."
+    networks:
+      - docsys
+
+volumes:
+  pg_data:
+  minio_data:
+
+networks:
+  docsys:
+    driver: bridge

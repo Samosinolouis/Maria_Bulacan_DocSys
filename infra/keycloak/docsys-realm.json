@@ -1,0 +1,75 @@
+{
+  "realm": "docsys",
+  "enabled": true,
+  "displayName": "Santa Maria Bulacan DMS",
+  "displayNameHtml": "<strong>Santa Maria Bulacan</strong> Document Management System",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "verifyEmail": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      { "name": "ADMIN", "description": "Full system administration" },
+      { "name": "MUNICIPAL_ADMINISTRATOR", "description": "Office head / approver" },
+      { "name": "RECORDS_OFFICER", "description": "Encodes and tracks requests and documents" },
+      { "name": "BOOKING_COORDINATOR", "description": "Manages venue and event bookings" },
+      { "name": "VIEWER", "description": "Read-only access" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "docsys-backend",
+      "name": "DocSys Backend (confidential)",
+      "description": "Server-side API client used for the Admin REST API (client_credentials).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "consentRequired": false,
+      "secret": "change-me",
+      "redirectUris": ["http://localhost:4000/*", "http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:4000", "http://localhost:3000"]
+    },
+    {
+      "clientId": "docsys-app",
+      "name": "DocSys Web App (public SPA)",
+      "description": "Browser client performing the authorization-code + PKCE flow.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "consentRequired": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-docsys-backend",
+      "enabled": true,
+      "serviceAccountClientId": "docsys-backend",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm",
+          "manage-realm"
+        ]
+      }
+    }
+  ]
+}
