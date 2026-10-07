@@ -111,6 +111,47 @@ App scripts:
 
 If no realm users exist yet, create one in the Keycloak admin console (http://localhost:8080, `admin` / `admin`), then assign the application roles the backend expects.
 
+## Keycloak Login Theme
+
+The Keycloak-hosted sign-in pages are rendered by the keycloakify project in `keycloack-idp-docsys/` (React + Vite, its own `node_modules`). Keycloak serves it as the realm's `loginTheme`, so the IdP pages carry the same institutional chrome as the app.
+
+Build and deploy (needs Apache Maven on PATH in addition to Java 21). Rebuild with Keycloak **stopped** - a running container holds the mounted jar open and Windows refuses the rename into `dist_keycloak/` with `EPERM`:
+
+```bash
+docker compose stop keycloak
+cd keycloack-idp-docsys
+npm run build-keycloak-theme:docsys   # writes dist_keycloak/keycloak-theme-for-kc-all-other-versions.jar
+cd ..
+docker compose up -d keycloak         # recreates the container with dist_keycloak/ mounted at /opt/keycloak/providers/
+```
+
+`build-keycloak-theme:docsys` wraps `build-keycloak-theme` and deletes the sibling `keycloak-theme-for-kc-22-to-25.jar`: that artifact targets Keycloak 22-25 and shades a `LoginFormsProviderFactory` SPI compiled against those versions, so it must not sit in a Keycloak 26 providers directory. The whole `dist_keycloak/` directory is mounted rather than the single jar, because Docker creates a *directory* at a bind-mount source that does not exist yet, which would then block the next theme build from writing the jar at that path.
+
+The realm's `loginTheme` is set to `keycloack-idp-docsys` (the keycloakify project's `package.json` name) in `infra/keycloak/docsys-realm.json`, which covers a fresh import. `--import-realm` skips a realm that already exists, so for a realm that is already running set it through the admin API:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -d client_id=admin-cli -d username=admin -d password=admin -d grant_type=password \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+curl -s -X PUT http://localhost:8080/admin/realms/docsys \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"loginTheme":"keycloack-idp-docsys"}'
+```
+
+The theme is a single-page app: the server HTML contains no `<form>`; the login form is built client-side and posts to the Keycloak `login-actions/authenticate` URL embedded in the page's `kcContext`. Preview the pages without Keycloak via `npm run storybook` (port 6006) in `keycloack-idp-docsys/`.
+
+### Sign out
+
+Signing out ends BOTH sessions. Auth.js `signOut` only clears its own cookie; Keycloak keeps a separate SSO cookie for the realm, so a plain signOut leaves the IdP session alive and the next authorization request is answered silently from it - the user is signed straight back in and never sees the credentials prompt again. The browser must therefore also be sent to Keycloak's end-session endpoint (RP-Initiated Logout 1.0):
+
+```
+{issuer}/protocol/openid-connect/logout?id_token_hint=<id_token>&client_id=docsys-app&post_logout_redirect_uri=<origin>/login
+```
+
+That is why the `id_token` is persisted in the Auth.js JWT and exposed on the session (`src/auth.ts`, `src/types/next-auth.d.ts`); it is only ever used as the logout hint. The order in `AuthProvider`'s `signOut` port is deliberate: read the hint while the session still exists, clear the local cookie, then navigate.
+
+The return target must be registered on the client, and Keycloak stores it as a client **attribute**, not a field: `post.logout.redirect.uris` (value `http://localhost:3000/*`). `ClientRepresentation` has no `postLogoutRedirectUris` property and the admin API rejects one with HTTP 400 `Unrecognized field`. It is set in `infra/keycloak/docsys-realm.json` for a fresh import and on the running realm through the admin API; unset it defaults to `+`, meaning "inherit the valid redirect URIs".
+
 ## Providers and Auth
 
 The root layout mounts one provider chain (`app/src/providers/`):
