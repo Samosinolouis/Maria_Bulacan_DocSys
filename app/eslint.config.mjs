@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Codegen output (generated from the backend SDL).
+    "src/types/graphql.ts",
   ]),
 ]);
 

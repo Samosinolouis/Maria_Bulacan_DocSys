@@ -2,7 +2,7 @@
  * Drizzle Kit Configuration
  *
  * Controls migration generation / push / studio against PostgreSQL.
- * [NFR-22] Schema changes ship via versioned migrations — no manual DDL.
+ * [NFR-22] Schema changes ship via versioned migrations - no manual DDL.
  */
 
 import "dotenv/config";
