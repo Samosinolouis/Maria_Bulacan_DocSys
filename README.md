@@ -102,7 +102,7 @@ The table below outlines the primary routes, HTTP methods, access scopes, and fu
 | `/archive` | Municipal Records Archive | Division II: Executive Review | Permanent digital repository for closed and concluded municipal transactions with instant dossier retrieval. |
 | `/schedule` | Central Venue and Gavel Calendar | Division III: Logistics and Compliance | Comprehensive facility reservation system across all 6 municipal venues with conflict detection and gavel indicator tracking. |
 | `/reports` | ARTA Compliance Ledger | Division III: Logistics and Compliance | Statutory compliance reporting under RA 11032, turnaround speed analytics, and monthly processing summary tables by statutory category. |
-| `/admin` | Statutory Audit Trail | Division III: Logistics and Compliance | Immutable chronological transaction ledger tracking all system mutations, user actions, timestamps, and audit event logs. |
+| `/settings` | Municipal Configuration Desk | Division IV: Configuration | Tabbed desk for document types, request types, venues, holidays, and shared-platform user and role administration against the permission catalog. |
 
 ### Modal Windows and Sub-Views
 
@@ -170,29 +170,121 @@ The complete Entity Relationship Diagram and PostgreSQL/SQL relational database 
 
 ---
 
-## Local Development Guide
+## Local Setup
 
-### 1. Main Application
+DocSys splits cleanly between **containerised backing services** and **natively run applications**. Docker is required only to initialise the three external dependencies the API depends on. The API and the frontend both run directly on the local machine, so they can be edited, hot-reloaded, and debugged as normal Node processes.
+
+| Component | Runs in | Address | Started by |
+| :--- | :--- | :--- | :--- |
+| PostgreSQL (database) | **Docker** | `localhost:5432` | `docker compose up -d` |
+| Keycloak (identity provider) | **Docker** | http://localhost:8080 | `docker compose up -d` |
+| MinIO (object storage) | **Docker** | http://localhost:9000 (S3 API), http://localhost:9001 (console) | `docker compose up -d` |
+| GraphQL API (`backend/`) | **Local machine** | http://localhost:4000/graphql | `npm run dev` |
+| Frontend (`app/`) | **Local machine** | http://localhost:3000 | `npm run dev` |
+
+Nothing about the API or the frontend is containerised: `docker compose up -d` starts the database, the identity provider, and the storage service only.
+
+### Prerequisites
+
+- Node.js 22 or later (the backend declares `engines.node >= 22`) and npm.
+- Docker Desktop, running.
+- Java 21 and Apache Maven, only for building the Keycloak login theme (step 5).
+
+> If `NODE_ENV=production` is exported in your shell, npm prunes devDependencies and `tsx` / `typescript` / `drizzle-kit` disappear. Install with `npm install --include=dev` in both `backend/` and `app/`.
+
+### 1. Start the backing services (Docker)
+
+From the repo root:
+
 ```bash
-cd app
-npm install
-npm run dev
-# Open http://localhost:3000
+docker compose up -d
 ```
 
-### 2. Production Static Build
+On first boot this creates the `docsys` database, imports the `docsys` Keycloak realm from `infra/keycloak/docsys-realm.json`, and runs a one-shot job that creates the `docsys-attachments` bucket.
+
+| Service | URL | Credentials |
+| :--- | :--- | :--- |
+| PostgreSQL | `localhost:5432` | `docsys` / `docsys_dev_pw`, database `docsys` (API tables in schema `app`, Keycloak tables in `public`) |
+| Keycloak | http://localhost:8080 | admin console `admin` / `admin` |
+| MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
+
+Tear down with `docker compose down`; add `-v` to drop the data volumes as well.
+
+### 2. Run the API on the local machine
+
 ```bash
-cd app
-npm run build
+cd backend
+npm install --include=dev
+cp .env.example .env
+npm run db:migrate            # creates the `app` schema and every table
+npm run db:seed               # dev accounts, app roles and the six venues (idempotent)
+npm run dev                   # http://localhost:4000/graphql
 ```
 
-### 3. Wireframe Application
+`db:seed` is what gives you something to sign in with, and it needs Keycloak to be up. It creates two Keycloak accounts plus the roles and shadow users the API authorizes against:
+
+| Username | Password | App role |
+| :--- | :--- | :--- |
+| `administrator` | `DocSys2026!` | `ADMINISTRATOR` (`*:*`) |
+| `clerk` | `DocSys2026!` | `CLERK_ENCODER` (workflow grants) |
+
+**Fix `DATABASE_URL` before migrating.** `backend/.env.example` masks the password (`postgres://docsys:***@localhost:5432/docsys`), which fails with `28P01`. Set it to the compose default:
+
 ```bash
-cd wireframe
-npm install
-npm run build
-npx serve -l 3005 ./out
-# Open http://localhost:3005
+DATABASE_URL=postgres://docsys:docsys_dev_pw@localhost:5432/docsys
+```
+
+Health probe: `GET http://localhost:4000/health`.
+
+### 3. Run the frontend on the local machine
+
+```bash
+cd app
+npm install --include=dev
+cp .env.example .env.local
+npx auth secret               # generates AUTH_SECRET into app/.env.local
+npm run dev                   # http://localhost:3000
+```
+
+`app/.env.example` already points at the local stack, so `AUTH_SECRET` is the only variable with no default. It is mandatory: without it every `/api/auth/*` request answers `500` (`MissingSecret`) and the login page cannot start the OIDC flow. Next.js reads `.env.local` at boot, so restart `npm run dev` after changing it.
+
+### 4. Sign in
+
+Open http://localhost:3000. Authentication is required, so the browser is handed straight to the Keycloak login page - there is no sign-in form in the app itself. Use `administrator` / `DocSys2026!` (or `clerk` for the non-administrative persona).
+
+### 5. Optional: build the Keycloak login theme
+
+The Keycloak pages are rendered by the keycloakify project in `keycloack-idp-docsys/`, which `docker-compose.yml` mounts into the Keycloak container. A fresh clone has no built artifact, so Keycloak falls back to its stock theme until the theme is built once:
+
+```bash
+docker compose stop keycloak          # a running container holds the mounted jar open
+cd keycloack-idp-docsys
+npm install --include=dev
+npm run build-keycloak-theme:docsys   # needs Java 21 + Maven on PATH
+cd ..
+docker compose up -d keycloak
+```
+
+Rebuild with Keycloak stopped, always: while the container runs it locks the jar and the build fails with `EPERM`.
+
+### 6. Verify the instance
+
+```bash
+curl -s localhost:4000/health                 # API health
+curl -s localhost:3000/api/auth/providers     # keycloak provider + its callback URL
+bash scripts/login-flow.sh                    # browserless end-to-end login through Keycloak
+```
+
+`scripts/login-flow.sh` drives the whole flow with curl (csrf, signin, Keycloak form, callback, session) and prints the resulting session; it is the fastest way to prove the frontend, the API, and the IdP are wired together.
+
+### Other local targets
+
+```bash
+# Production build of the frontend (NextAuth needs the secret at build time)
+cd app && AUTH_SECRET=<any-value> npm run build && npm run start
+
+# Isolated blank wireframe application (layout audit, no production colors)
+cd wireframe && npm install && npm run build && npx serve -l 3005 ./out
 ```
 
 ---
