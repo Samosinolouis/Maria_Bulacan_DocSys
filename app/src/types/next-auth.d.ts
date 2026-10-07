@@ -14,6 +14,8 @@ declare module 'next-auth' {
     /** Set when the token refresh failed; the client must re-authenticate. */
     error?: 'RefreshAccessTokenError';
     expiresAt?: number;
+    /** Keycloak id_token, passed as `id_token_hint` on RP-initiated logout. */
+    idToken?: string;
     user: DefaultSession['user'];
   }
 }
@@ -24,6 +26,8 @@ declare module 'next-auth/jwt' {
     refreshToken?: string;
     /** Absolute expiry (seconds since epoch) of the access token. */
     expiresAt?: number;
+    /** Keycloak id_token (logout hint). */
+    idToken?: string;
     error?: 'RefreshAccessTokenError';
   }
 }
@@ -36,6 +40,8 @@ declare module '@auth/core/jwt' {
     refreshToken?: string;
     /** Absolute expiry (seconds since epoch) of the access token. */
     expiresAt?: number;
+    /** Keycloak id_token (logout hint). */
+    idToken?: string;
     error?: 'RefreshAccessTokenError';
   }
 }

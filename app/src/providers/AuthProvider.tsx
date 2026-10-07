@@ -21,6 +21,18 @@ import { ToastProvider } from './ToastProvider';
 import { SessionContext } from './contexts';
 
 /**
+ * Keycloak coordinates for RP-initiated logout. The browser performs that
+ * redirect, so it must come from the public (client-visible) variables - the
+ * server-only AUTH_KEYCLOAK_ISSUER / AUTH_KEYCLOAK_ID are not available here.
+ * Both point at the same realm as `src/auth.ts` by default.
+ */
+const KC_ISSUER = `${(process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'http://localhost:8080').replace(
+  /\/+$/,
+  '',
+)}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? 'docsys'}`;
+const KC_CLIENT_ID = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT ?? 'docsys-app';
+
+/**
  * How often an open tab re-runs the OIDC refresh-token grant (minutes). Keep it
  * comfortably below the Keycloak access-token lifespan (5 minutes in the
  * `docsys` realm), otherwise the token can expire between ticks.
@@ -33,8 +45,35 @@ const authPort = {
   signIn: async (returnTo?: string) => {
     await signIn('keycloak', { redirectTo: returnTo ?? '/dashboard' });
   },
+  /**
+   * Sign out of BOTH the application and the identity provider.
+   *
+   * Auth.js `signOut` only clears its own session cookie. Keycloak keeps a
+   * separate SSO cookie for the realm, so after a plain signOut the next
+   * authorization request is answered silently from that cookie and the user is
+   * signed straight back in without being asked for credentials. The IdP session
+   * must be ended explicitly with an RP-initiated logout (OIDC RP-Initiated
+   * Logout 1.0): Keycloak's end-session endpoint is handed the `id_token` as
+   * `id_token_hint`, which identifies the session to terminate, plus the
+   * registered `post_logout_redirect_uri` to return to.
+   *
+   * Order matters: the hint is read while the session still exists, then the
+   * local cookie is cleared, then the browser is sent to Keycloak.
+   */
   signOut: async () => {
-    await signOut({ redirectTo: '/login' });
+    const session = await getSession();
+    const endSessionUrl = new URL(`${KC_ISSUER}/protocol/openid-connect/logout`);
+    if (session?.idToken) endSessionUrl.searchParams.set('id_token_hint', session.idToken);
+    // Sent alongside the hint so Keycloak can validate the redirect target even
+    // when the hint is unavailable (a session minted before it was persisted).
+    endSessionUrl.searchParams.set('client_id', KC_CLIENT_ID);
+    endSessionUrl.searchParams.set(
+      'post_logout_redirect_uri',
+      `${window.location.origin}/login`,
+    );
+
+    await signOut({ redirect: false });
+    window.location.href = endSessionUrl.toString();
   },
   getSessionToken: async () => {
     const session = await getSession();

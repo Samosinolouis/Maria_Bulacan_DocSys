@@ -32,6 +32,12 @@ interface DocSysToken {
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: number;
+  /**
+   * Keycloak id_token. Kept solely so RP-initiated logout can pass it as
+   * `id_token_hint` - that hint is what makes Keycloak end its own SSO session
+   * instead of silently re-authenticating the next authorization request.
+   */
+  idToken?: string;
   error?: 'RefreshAccessTokenError';
 }
 
@@ -54,6 +60,7 @@ async function refreshAccessToken(token: DocSysToken) {
   const refreshed = (await res.json()) as {
     access_token?: string;
     refresh_token?: string;
+    id_token?: string;
     expires_in?: number;
     error?: string;
   };
@@ -66,6 +73,7 @@ async function refreshAccessToken(token: DocSysToken) {
     accessToken: refreshed.access_token,
     refreshToken: refreshed.refresh_token ?? token.refreshToken,
     expiresAt: Math.floor(Date.now() / 1000) + (refreshed.expires_in ?? 300),
+    idToken: refreshed.id_token,
   };
 }
 
@@ -93,10 +101,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const acc = account as unknown as {
           access_token?: string;
           refresh_token?: string;
+          id_token?: string;
           expires_at?: number;
         };
         t.accessToken = acc.access_token;
         t.refreshToken = acc.refresh_token;
+        t.idToken = acc.id_token;
         t.expiresAt = acc.expires_at;
         return token;
       }
@@ -112,6 +122,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         t.accessToken = refreshed.accessToken;
         t.refreshToken = refreshed.refreshToken;
         t.expiresAt = refreshed.expiresAt;
+        // Keycloak re-issues the id_token on refresh; keep the newest so the
+        // logout hint always belongs to the live session.
+        if (refreshed.idToken) t.idToken = refreshed.idToken;
         delete t.error;
         return token;
       } catch {
@@ -123,6 +136,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const t = token as unknown as DocSysToken;
       session.accessToken = t.accessToken;
       session.expiresAt = t.expiresAt;
+      session.idToken = t.idToken;
       session.error = t.error;
       return session;
     },
