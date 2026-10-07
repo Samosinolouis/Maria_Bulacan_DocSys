@@ -1,0 +1,82 @@
+# [C] MUTATION PAYLOADS
+#
+# Every mutation answers with the entities it changed plus its own result:
+#
+#   changedEntities: ["Request_<id>", "Document_<id>", ...]   (EntityName_EntityId)
+#
+# The client uses the list to invalidate exactly the queries that are now stale
+# instead of guessing, so a mutation never leaves a screen showing old rows and
+# never drops a cache entry that is still valid.
+
+type RequestMutationPayload {
+  changedEntities: [String!]!
+  request: Request!
+}
+
+type DocumentMutationPayload {
+  changedEntities: [String!]!
+  document: Document!
+}
+
+type EventMutationPayload {
+  changedEntities: [String!]!
+  event: Event!
+}
+
+type VenueMutationPayload {
+  changedEntities: [String!]!
+  venue: Venue!
+}
+
+type FolderMutationPayload {
+  changedEntities: [String!]!
+  folder: Folder!
+}
+
+"""markNotificationRead: null when the notification does not exist."""
+type NotificationMutationPayload {
+  changedEntities: [String!]!
+  notification: Notification
+}
+
+"""markAllNotificationsRead: `count` is how many rows were marked read."""
+type NotificationBulkPayload {
+  changedEntities: [String!]!
+  count: Int!
+}
+
+type RequestTypeMutationPayload {
+  changedEntities: [String!]!
+  requestType: RequestType!
+}
+
+type DocumentTypeMutationPayload {
+  changedEntities: [String!]!
+  documentType: DocumentType!
+}
+
+type HolidayMutationPayload {
+  changedEntities: [String!]!
+  holiday: Holiday!
+}
+
+type RoleMutationPayload {
+  changedEntities: [String!]!
+  role: Role!
+}
+
+type UserMutationPayload {
+  changedEntities: [String!]!
+  user: User!
+}
+
+type ReportArtifactMutationPayload {
+  changedEntities: [String!]!
+  report: ReportArtifact!
+}
+
+"""Presigned downloads change nothing; the list is always empty."""
+type DownloadTicketMutationPayload {
+  changedEntities: [String!]!
+  ticket: DownloadTicket!
+}

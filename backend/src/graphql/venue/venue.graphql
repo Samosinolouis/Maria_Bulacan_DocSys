@@ -1,4 +1,4 @@
-# [C] BOOKING MODULE — venue lookup
+# [C] BOOKING MODULE - venue lookup
 
 type Venue implements Node {
   id: ID!
@@ -7,9 +7,39 @@ type Venue implements Node {
   """true for Mayor's Conf. Room / Admin's Office (special meetings)."""
   specialUse: Boolean!
   isActive: Boolean!
+
+  """
+  Live availability: how many CONFIRMED bookings this venue still has whose
+  slot has not ended yet (`end_time` later than now on the event date).
+  Computed per read - never cached server-side - so the scheduler shows the
+  venue as it is right now. Served by the partial index
+  `events_active_bookings_index`.
+  """
+  activeBookings: Int!
 }
 
 extend type Query {
   venue(id: ID!): Venue
   venues(includeInactive: Boolean = false): [Venue!]!
+}
+
+input CreateVenueInput {
+  """Short uppercase code, unique. Not editable afterwards."""
+  code: String!
+  name: String!
+  specialUse: Boolean = false
+  isActive: Boolean = true
+}
+
+"""`code` is the natural key and is not editable once a venue exists."""
+input UpdateVenueInput {
+  venueId: ID!
+  name: String
+  specialUse: Boolean
+  isActive: Boolean
+}
+
+extend type Mutation {
+  createVenue(input: CreateVenueInput!): VenueMutationPayload!
+  updateVenue(input: UpdateVenueInput!): VenueMutationPayload!
 }

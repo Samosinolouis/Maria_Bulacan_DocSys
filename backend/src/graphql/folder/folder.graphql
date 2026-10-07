@@ -1,0 +1,32 @@
+# [B] DOCUMENT MODULE - archive folders (folders 1 --- N documents)
+
+type Folder implements Node {
+  id: ID!
+  """NULL = root-level folder."""
+  parentId: ID
+  """Denormalized "/"-separated path, e.g. "2026/Executive Orders"."""
+  path: String!
+  """Unique among siblings; never contains "/"."""
+  name: String!
+  """Direct children at one level: subfolders + documents."""
+  itemCount: Int!
+  createdBy: ID!
+  createdAt: DateTime!
+}
+
+input CreateFolderInput {
+  name: String!
+  """Omit for a root-level folder."""
+  parentId: ID
+}
+
+extend type Query {
+  folder(id: ID!): Folder
+  """Direct subfolders of a folder; omit parentId to list root folders."""
+  folders(parentId: ID): [Folder!]!
+}
+
+extend type Mutation {
+  """Create a folder; the path is derived from the parent's path + name."""
+  createFolder(input: CreateFolderInput!): FolderMutationPayload!
+}

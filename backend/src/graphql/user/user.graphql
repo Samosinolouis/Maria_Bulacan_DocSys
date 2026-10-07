@@ -1,4 +1,4 @@
-# [A] SHARED PLATFORM — users, roles, user_roles
+# [A] SHARED PLATFORM - users, roles, user_roles
 
 type User implements Node {
   id: ID!
@@ -104,11 +104,11 @@ extend type Query {
 # --- Mutations ---
 
 extend type Mutation {
-  updateUserProfile(id: ID!, input: UpdateUserProfileInput!): User!
-  """Soft deactivation — users are never deleted (FR-03)."""
-  deactivateUser(id: ID!): User!
-  reactivateUser(id: ID!): User!
+  updateUserProfile(id: ID!, input: UpdateUserProfileInput!): UserMutationPayload!
+  """Soft deactivation - users are never deleted (FR-03)."""
+  deactivateUser(id: ID!): UserMutationPayload!
+  reactivateUser(id: ID!): UserMutationPayload!
   """Role assignment records who granted the role and when (FR-04)."""
-  assignRole(input: AssignRoleInput!): User!
-  removeRole(input: RemoveRoleInput!): User!
+  assignRole(input: AssignRoleInput!): UserMutationPayload!
+  removeRole(input: RemoveRoleInput!): UserMutationPayload!
 }

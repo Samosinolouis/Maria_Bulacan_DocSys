@@ -1,7 +1,7 @@
 /**
  * GraphQL Context Type
  *
- * Shape of the context available in every resolver. Provides interfaces —
+ * Shape of the context available in every resolver. Provides interfaces -
  * never concrete implementations. [SOLID:DIP]
  */
 
@@ -15,6 +15,7 @@ import type { INotificationService } from "../interfaces/notification.service.in
 import type { IRequestService } from "../interfaces/request.service.interface.js";
 import type { IDocumentService } from "../interfaces/document.service.interface.js";
 import type { IAttachmentService } from "../interfaces/attachment.service.interface.js";
+import type { IFolderService } from "../interfaces/folder.service.interface.js";
 import type { IReportService } from "../interfaces/report.service.interface.js";
 import type { ILookupService } from "../interfaces/lookup.service.interface.js";
 import type { IEventService, IVenueService } from "../interfaces/event.service.interface.js";
@@ -24,7 +25,7 @@ export interface GraphQLContext {
   /** Authenticated user (null if unauthenticated). */
   user: AuthUser | null;
 
-  /** Business services — resolvers depend on these interfaces only. */
+  /** Business services - resolvers depend on these interfaces only. */
   services: {
     user: IUserService;
     role: IRoleService;
@@ -32,6 +33,7 @@ export interface GraphQLContext {
     request: IRequestService;
     document: IDocumentService;
     attachment: IAttachmentService;
+    folder: IFolderService;
     report: IReportService;
     lookup: ILookupService;
     event: IEventService;

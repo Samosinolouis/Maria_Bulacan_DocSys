@@ -1,4 +1,4 @@
-# [B] DOCUMENT MODULE — Step 1 (reception) & Step 2 (screening)
+# [B] DOCUMENT MODULE - Step 1 (reception) & Step 2 (screening)
 
 enum RequestStatus {
   RECEIVED
@@ -110,7 +110,7 @@ input EncodeRequestInput {
 input ScreenRequestInput {
   requestId: ID!
   passed: Boolean!
-  """Specific deficiencies — required when passed = false (FR-13)."""
+  """Specific deficiencies - required when passed = false (FR-13)."""
   deficiencies: [String!]
   notes: String
 }
@@ -135,9 +135,9 @@ extend type Query {
 
 extend type Mutation {
   """Encode an incoming request; issues a control number + RECEIVED log."""
-  encodeRequest(input: EncodeRequestInput!): Request!
+  encodeRequest(input: EncodeRequestInput!): RequestMutationPayload!
   """Record a screening decision (pass -> PREPARATION; fail -> RETURNED_FOR_COMPLIANCE)."""
-  screenRequest(input: ScreenRequestInput!): Request!
+  screenRequest(input: ScreenRequestInput!): RequestMutationPayload!
   """Resubmit a returned request back into screening (FR-14)."""
-  resubmitRequest(id: ID!): Request!
+  resubmitRequest(id: ID!): RequestMutationPayload!
 }

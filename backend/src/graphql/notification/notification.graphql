@@ -1,4 +1,4 @@
-# [A] SHARED PLATFORM — in-app notifications (FR-47..51)
+# [A] SHARED PLATFORM - in-app notifications (FR-47..51)
 
 enum NotificationType {
   EVENT_REMINDER
@@ -67,6 +67,6 @@ extend type Query {
 }
 
 extend type Mutation {
-  markNotificationRead(id: ID!): Notification
-  markAllNotificationsRead: Int!
+  markNotificationRead(id: ID!): NotificationMutationPayload!
+  markAllNotificationsRead: NotificationBulkPayload!
 }

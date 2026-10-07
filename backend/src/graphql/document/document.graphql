@@ -1,4 +1,4 @@
-# [B] DOCUMENT MODULE — Steps 3-6 (preparation, review, transmission, archiving)
+# [B] DOCUMENT MODULE - Steps 3-6 (preparation, review, transmission, archiving)
 
 enum DocumentStatus {
   DRAFTING
@@ -60,6 +60,8 @@ type Document implements Node {
   decisionNotes: String
   decidedBy: ID
   decidedAt: DateTime
+  """Archive folder - set when the request is closed and filed."""
+  folderId: ID
   createdBy: ID!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -88,7 +90,7 @@ type DocumentLog implements Node {
   requestId: ID
   documentId: ID
   actorId: ID!
-  """SNAPSHOT — survives renames."""
+  """SNAPSHOT - survives renames."""
   actorName: String!
   """SNAPSHOT."""
   actorRole: String!
@@ -115,6 +117,8 @@ input DocumentFilterInput {
   documentTypeId: ID
   requestId: ID
   assignedTo: ID
+  """Documents filed into an archive folder."""
+  folderId: ID
 }
 
 input DocumentSortInput {
@@ -172,8 +176,10 @@ input TransmitDocumentInput {
 
 input CloseRequestInput {
   requestId: ID!
-  """SIGNED_FINAL attachment id — required before closing (FR-29)."""
+  """SIGNED_FINAL attachment id - required before closing (FR-29)."""
   finalAttachmentId: ID
+  """Optional archive folder; every document of the request is filed into it."""
+  folderId: ID
   notes: String
 }
 
@@ -196,10 +202,10 @@ extend type Query {
 # --- Mutations ---
 
 extend type Mutation {
-  prepareDocument(input: PrepareDocumentInput!): Document!
-  submitDocumentForReview(id: ID!): Document!
-  reviewDocument(input: ReviewDocumentInput!): Document!
-  signDocument(input: SignDocumentInput!): Document!
-  transmitDocument(input: TransmitDocumentInput!): Document!
-  closeRequest(input: CloseRequestInput!): Document!
+  prepareDocument(input: PrepareDocumentInput!): DocumentMutationPayload!
+  submitDocumentForReview(id: ID!): DocumentMutationPayload!
+  reviewDocument(input: ReviewDocumentInput!): DocumentMutationPayload!
+  signDocument(input: SignDocumentInput!): DocumentMutationPayload!
+  transmitDocument(input: TransmitDocumentInput!): DocumentMutationPayload!
+  closeRequest(input: CloseRequestInput!): DocumentMutationPayload!
 }

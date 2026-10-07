@@ -1,4 +1,4 @@
-# Root schema — base Query/Mutation extended by each domain module.
+# Root schema - base Query/Mutation extended by each domain module.
 
 """
 An object with a globally unique ID.
@@ -19,7 +19,7 @@ type PageInfo {
 }
 
 type Query {
-  """Liveness probe — always returns "ok"."""
+  """Liveness probe - always returns "ok"."""
   _health: String!
 }
 

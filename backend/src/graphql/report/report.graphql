@@ -1,4 +1,4 @@
-# [B] DOCUMENT MODULE — dashboards, reports & lookup maintenance (FR-35..38)
+# [B] DOCUMENT MODULE - dashboards, reports & lookup maintenance (FR-35..38)
 
 type DashboardMetrics {
   totalDocuments: Int!
@@ -83,15 +83,15 @@ extend type Query {
   """Monthly / annual per-category counts (FR-36)."""
   categorySummary(input: CategorySummaryInput!): [CategorySummaryRow!]!
 
-  """Holidays within a window — feeds SLA computation (FR-09)."""
+  """Holidays within a window - feeds SLA computation (FR-09)."""
   holidays(from: String, to: String): [Holiday!]!
 }
 
 extend type Mutation {
   """Export a summary to PDF or Excel (FR-37)."""
-  exportSummary(input: ExportReportInput!): ReportArtifact!
+  exportSummary(input: ExportReportInput!): ReportArtifactMutationPayload!
 
-  createRequestType(input: CreateRequestTypeInput!): RequestType!
-  createDocumentType(input: CreateDocumentTypeInput!): DocumentType!
-  upsertHoliday(input: UpsertHolidayInput!): Holiday!
+  createRequestType(input: CreateRequestTypeInput!): RequestTypeMutationPayload!
+  createDocumentType(input: CreateDocumentTypeInput!): DocumentTypeMutationPayload!
+  upsertHoliday(input: UpsertHolidayInput!): HolidayMutationPayload!
 }

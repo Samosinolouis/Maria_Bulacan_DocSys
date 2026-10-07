@@ -1,10 +1,17 @@
 /**
- * Attachment Resolvers — uploads are multipart REST routes; GraphQL exposes
+ * Attachment Resolvers - uploads are multipart REST routes; GraphQL exposes
  * listing + presigned download tickets (FR-34, NFR-06).
+ * Argument shapes come from the generated schema types (src/types/graphql.ts).
  */
 
 import type { GraphQLContext } from "../context.js";
 import { requireUser } from "../context.js";
+import type {
+  MutationDocumentAttachmentDownloadArgs,
+  MutationRequestAttachmentDownloadArgs,
+  QueryDocumentAttachmentsArgs,
+  QueryRequestAttachmentsArgs,
+} from "../../types/graphql.js";
 
 async function toTicket(
   promise: ReturnType<GraphQLContext["services"]["attachment"]["getRequestAttachmentDownload"]>,
@@ -20,12 +27,15 @@ async function toTicket(
 
 export const attachmentResolvers = {
   Query: {
-    requestAttachments: (_p: unknown, { requestId }: { requestId: string }, ctx: GraphQLContext) =>
-      ctx.services.attachment.listRequestAttachments(requestId),
+    requestAttachments: (
+      _p: unknown,
+      { requestId }: QueryRequestAttachmentsArgs,
+      ctx: GraphQLContext,
+    ) => ctx.services.attachment.listRequestAttachments(requestId),
 
     documentAttachments: (
       _p: unknown,
-      { documentId }: { documentId: string },
+      { documentId }: QueryDocumentAttachmentsArgs,
       ctx: GraphQLContext,
     ) => ctx.services.attachment.listDocumentAttachments(documentId),
   },
@@ -33,20 +43,24 @@ export const attachmentResolvers = {
   Mutation: {
     requestAttachmentDownload: async (
       _p: unknown,
-      { id, inline }: { id: string; inline?: boolean },
+      { id, inline }: MutationRequestAttachmentDownloadArgs,
       ctx: GraphQLContext,
     ) => {
-      requireUser(ctx);
-      return toTicket(ctx.services.attachment.getRequestAttachmentDownload(id, inline ?? false));
+      const actor = requireUser(ctx);
+      return toTicket(
+        ctx.services.attachment.getRequestAttachmentDownload(actor.sub, id, inline ?? false),
+      );
     },
 
     documentAttachmentDownload: async (
       _p: unknown,
-      { id, inline }: { id: string; inline?: boolean },
+      { id, inline }: MutationDocumentAttachmentDownloadArgs,
       ctx: GraphQLContext,
     ) => {
-      requireUser(ctx);
-      return toTicket(ctx.services.attachment.getDocumentAttachmentDownload(id, inline ?? false));
+      const actor = requireUser(ctx);
+      return toTicket(
+        ctx.services.attachment.getDocumentAttachmentDownload(actor.sub, id, inline ?? false),
+      );
     },
   },
 };

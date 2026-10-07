@@ -1,4 +1,4 @@
-# [B] DOCUMENT MODULE — attachments (upload-only) & secure downloads
+# [B] DOCUMENT MODULE - attachments (upload-only) & secure downloads
 
 enum RequestAttachmentKind {
   INCOMING_LETTER
@@ -57,7 +57,7 @@ extend type Mutation {
   NOTE: the actual upload is multipart and handled by the REST routes
   (POST /uploads/requests/:id, POST /uploads/documents/:id), not GraphQL.
   """
-  requestAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicket!
+  requestAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicketMutationPayload!
   """Get a short-lived presigned URL for a document attachment (FR-34)."""
-  documentAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicket!
+  documentAttachmentDownload(id: ID!, inline: Boolean = false): DownloadTicketMutationPayload!
 }

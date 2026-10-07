@@ -1,4 +1,4 @@
-# [A] SHARED PLATFORM — roles & permissions
+# [A] SHARED PLATFORM - roles & permissions
 
 type RoleEdge {
   node: Role!
@@ -57,6 +57,6 @@ extend type Query {
 }
 
 extend type Mutation {
-  createRole(input: CreateRoleInput!): Role!
-  updateRole(id: ID!, input: UpdateRoleInput!): Role!
+  createRole(input: CreateRoleInput!): RoleMutationPayload!
+  updateRole(id: ID!, input: UpdateRoleInput!): RoleMutationPayload!
 }

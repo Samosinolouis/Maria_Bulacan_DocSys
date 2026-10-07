@@ -3,12 +3,22 @@
  *
  * Thin adapters: validate/authorize, then delegate to ctx.services.user.
  * Business rules live in the service layer. [SOLID:SRP]
+ * Argument shapes come from the generated schema types (src/types/graphql.ts).
  */
 
-import type { GraphQLContext, } from "../context.js";
+import type { GraphQLContext } from "../context.js";
 import { requireUser } from "../context.js";
-import { toConnectionArgs, type ListArgs } from "../helpers.js";
+import { toConnectionArgs } from "../helpers.js";
 import type { UserFilter, UserSortField } from "../../interfaces/user.service.interface.js";
+import type {
+  MutationAssignRoleArgs,
+  MutationDeactivateUserArgs,
+  MutationReactivateUserArgs,
+  MutationRemoveRoleArgs,
+  MutationUpdateUserProfileArgs,
+  QueryUserArgs,
+  QueryUsersArgs,
+} from "../../types/graphql.js";
 
 interface ProvisionUserInput {
   firstName: string;
@@ -24,37 +34,37 @@ interface ProvisionUserInput {
 export const userResolvers = {
   Query: {
     me: (_p: unknown, _a: unknown, ctx: GraphQLContext) =>
-      ctx.user ? ctx.services.user.getById(ctx.user.sub) : null,
+      ctx.user ? ctx.services.user.ensureProvisioned(ctx.user) : null,
 
-    user: (_p: unknown, { id }: { id: string }, ctx: GraphQLContext) =>
+    user: (_p: unknown, { id }: QueryUserArgs, ctx: GraphQLContext) =>
       ctx.services.user.getById(id),
 
-    users: (_p: unknown, args: ListArgs, ctx: GraphQLContext) =>
+    users: (_p: unknown, args: QueryUsersArgs, ctx: GraphQLContext) =>
       ctx.services.user.list(toConnectionArgs<UserFilter, UserSortField>(args)),
   },
 
   Mutation: {
     updateUserProfile: (
       _p: unknown,
-      { id, input }: { id: string; input: never },
+      { id, input }: MutationUpdateUserProfileArgs,
       ctx: GraphQLContext,
-    ) => ctx.services.user.updateProfile(id, input),
+    ) => ctx.services.user.updateProfile(requireUser(ctx).sub, id, input),
 
-    deactivateUser: (_p: unknown, { id }: { id: string }, ctx: GraphQLContext) =>
+    deactivateUser: (_p: unknown, { id }: MutationDeactivateUserArgs, ctx: GraphQLContext) =>
       ctx.services.user.deactivate(requireUser(ctx).sub, id),
 
-    reactivateUser: (_p: unknown, { id }: { id: string }, ctx: GraphQLContext) =>
+    reactivateUser: (_p: unknown, { id }: MutationReactivateUserArgs, ctx: GraphQLContext) =>
       ctx.services.user.reactivate(requireUser(ctx).sub, id),
 
     assignRole: (
       _p: unknown,
-      { input }: { input: { userId: string; roleId: string } },
+      { input }: MutationAssignRoleArgs,
       ctx: GraphQLContext,
     ) => ctx.services.user.assignRole(requireUser(ctx).sub, input.userId, input.roleId),
 
     removeRole: (
       _p: unknown,
-      { input }: { input: { userId: string; roleId: string } },
+      { input }: MutationRemoveRoleArgs,
       ctx: GraphQLContext,
     ) => ctx.services.user.removeRole(requireUser(ctx).sub, input.userId, input.roleId),
   },

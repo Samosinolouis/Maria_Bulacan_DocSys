@@ -1,4 +1,4 @@
-# [C] BOOKING MODULE — venues & events (FR-41..46)
+# [C] BOOKING MODULE - venues & events (FR-41..46)
 
 enum EventStatus {
   CONFIRMED
@@ -156,8 +156,8 @@ extend type Query {
 # --- Mutations ---
 
 extend type Mutation {
-  createEvent(input: CreateEventInput!): Event!
-  updateEvent(input: UpdateEventInput!): Event!
+  createEvent(input: CreateEventInput!): EventMutationPayload!
+  updateEvent(input: UpdateEventInput!): EventMutationPayload!
   """Cancellation is a status change, never a delete."""
-  cancelEvent(id: ID!, reason: String): Event!
+  cancelEvent(id: ID!, reason: String): EventMutationPayload!
 }
