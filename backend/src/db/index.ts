@@ -14,7 +14,7 @@ import * as schema from "./schema/index.js";
 /** Raw postgres.js connection (used for queries). */
 const client = postgres(config.databaseUrl);
 
-/** Drizzle ORM instance — passed around via DI, not imported ad hoc. */
+/** Drizzle ORM instance - passed around via DI, not imported ad hoc. */
 const db = drizzle(client, { schema });
 
 export type Database = typeof db;

@@ -1,9 +1,9 @@
 /**
- * [B] DOCUMENT MODULE — Six-step lifecycle
+ * [B] DOCUMENT MODULE - Six-step lifecycle
  *
  * Tables: request_types, document_types, control_number_sequences, holidays,
- *         requests, request_attachments, documents, document_attachments,
- *         transmissions, document_logs.
+ *         requests, request_attachments, folders, documents,
+ *         document_attachments, transmissions, document_logs.
  *
  * Conventions (schema.txt):
  *  - Attachments are UPLOAD-ONLY; every upload records uploaded_by + sha256.
@@ -13,7 +13,6 @@
  */
 
 import {
-  pgTable,
   uuid,
   varchar,
   text,
@@ -24,8 +23,12 @@ import {
   jsonb,
   index,
   unique,
+  uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
+import { appSchema } from "./schema.ts";
 import { users } from "./platform.ts";
 import {
   requestChannelEnum,
@@ -43,7 +46,7 @@ import {
 // ============================================================
 
 /** Lookup: what came IN (TRAVEL_ORDER, VENUE_REQ, ...). */
-export const requestTypes = pgTable("request_types", {
+export const requestTypes = appSchema.table("request_types", {
   id: uuid("id").primaryKey().defaultRandom(),
   code: varchar("code", { length: 50 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -55,7 +58,7 @@ export const requestTypes = pgTable("request_types", {
 });
 
 /** Lookup: what goes OUT (EXEC_ORDER, SB_ENDORSEMENT, ...). */
-export const documentTypes = pgTable("document_types", {
+export const documentTypes = appSchema.table("document_types", {
   id: uuid("id").primaryKey().defaultRandom(),
   code: varchar("code", { length: 50 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -70,7 +73,7 @@ export const documentTypes = pgTable("document_types", {
  * UPDATE ... RETURNING (row lock) so concurrent clerks never collide or skip.
  * control_no = <prefix>-<year>-<zero-padded last_value>, e.g. TO-2026-0045.
  */
-export const controlNumberSequences = pgTable(
+export const controlNumberSequences = appSchema.table(
   "control_number_sequences",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -89,7 +92,7 @@ export const controlNumberSequences = pgTable(
 );
 
 /** Lookup; feeds business-day SLA computation (FR-09, NFR-23). */
-export const holidays = pgTable("holidays", {
+export const holidays = appSchema.table("holidays", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** One row per date; admin encodes each year's official proclamation list. */
   holidayDate: date("holiday_date").notNull().unique(),
@@ -101,7 +104,7 @@ export const holidays = pgTable("holidays", {
 // ============================================================
 
 /** THE TRANSACTION. Owns the 6-step lifecycle. */
-export const requests = pgTable(
+export const requests = appSchema.table(
   "requests",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -139,7 +142,7 @@ export const requests = pgTable(
 );
 
 /** Uploaded files against a request (upload-only). */
-export const requestAttachments = pgTable(
+export const requestAttachments = appSchema.table(
   "request_attachments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -147,7 +150,7 @@ export const requestAttachments = pgTable(
       .notNull()
       .references(() => requests.id),
     kind: requestAttachmentKindEnum("kind").notNull(),
-    /** B2 object key. */
+    /** MinIO object key. */
     storageKey: varchar("storage_key", { length: 1024 }).notNull(),
     bucketName: varchar("bucket_name", { length: 255 }).notNull(),
     originalName: varchar("original_name", { length: 1024 }).notNull(),
@@ -167,8 +170,47 @@ export const requestAttachments = pgTable(
   (table) => [index("request_attachments_request_id_index").on(table.requestId)],
 );
 
+// ============================================================
+// ARCHIVE FOLDERS
+// ============================================================
+
+/**
+ * Hierarchical archive folders (folders 1 --- N documents). `path` is
+ * denormalized: computed as `<parent.path>/<name>` at creation (root folders
+ * use `<name>` alone), so an entire subtree is addressable by path prefix.
+ * Names are unique among siblings; "/" is illegal inside a name.
+ */
+export const folders = appSchema.table(
+  "folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** NULL = root-level folder. */
+    parentId: uuid("parent_id").references((): AnyPgColumn => folders.id),
+    /** Denormalized "/"-separated path, e.g. "2026/Executive Orders". */
+    path: varchar("path", { length: 1024 }).notNull(),
+    /** Unique among siblings; must not contain "/". */
+    name: varchar("name", { length: 255 }).notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("folders_parent_id_index").on(table.parentId),
+    unique("folders_path_unique").on(table.path),
+    unique("folders_parent_name_unique").on(table.parentId, table.name),
+    // Postgres treats NULLs as distinct, so root-level sibling names need
+    // their own partial unique index.
+    uniqueIndex("folders_root_name_unique")
+      .on(table.name)
+      .where(sql`${table.parentId} is null`),
+  ],
+);
+
 /** ONE OUTPUT ARTIFACT (0..N per request). */
-export const documents = pgTable(
+export const documents = appSchema.table(
   "documents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -192,6 +234,8 @@ export const documents = pgTable(
     decisionNotes: text("decision_notes"),
     decidedBy: uuid("decided_by").references(() => users.id),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** Archive folder - set when the request is closed and filed (FR-29..31). */
+    folderId: uuid("folder_id").references(() => folders.id),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),
@@ -206,11 +250,12 @@ export const documents = pgTable(
     index("documents_request_id_index").on(table.requestId),
     index("documents_status_index").on(table.status),
     index("documents_document_type_id_index").on(table.documentTypeId),
+    index("documents_folder_id_index").on(table.folderId),
   ],
 );
 
 /** Uploaded files against an output document. */
-export const documentAttachments = pgTable(
+export const documentAttachments = appSchema.table(
   "document_attachments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -237,7 +282,7 @@ export const documentAttachments = pgTable(
 );
 
 /** Dispatch records (FR-26..28). */
-export const transmissions = pgTable(
+export const transmissions = appSchema.table(
   "transmissions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -271,8 +316,8 @@ export const transmissions = pgTable(
   ],
 );
 
-/** APPEND-ONLY audit trail (document module) — [NFR-09] no UPDATE/DELETE. */
-export const documentLogs = pgTable(
+/** APPEND-ONLY audit trail (document module) - [NFR-09] no UPDATE/DELETE. */
+export const documentLogs = appSchema.table(
   "document_logs",
   {
     id: uuid("id").primaryKey().defaultRandom(),

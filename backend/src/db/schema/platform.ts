@@ -1,16 +1,15 @@
 /**
- * [A] SHARED PLATFORM — Identity & Authorization
+ * [A] SHARED PLATFORM - Identity & Authorization
  *
  * Tables: users, roles, user_roles.
  *
  * Conventions (schema.txt):
- *  - users.id = Keycloak OIDC "sub" claim (UUID) — the join key by definition.
+ *  - users.id = Keycloak OIDC "sub" claim (UUID) - the join key by definition.
  *  - Users are deactivated (is_active = false), never deleted.
- *  - No local credentials — authentication lives entirely in Keycloak.
+ *  - No local credentials - authentication lives entirely in Keycloak.
  */
 
 import {
-  pgTable,
   uuid,
   varchar,
   text,
@@ -21,8 +20,10 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { appSchema } from "./schema.ts";
+
 /** Shadow record of the Keycloak user. */
-export const users = pgTable("users", {
+export const users = appSchema.table("users", {
   /** = Keycloak OIDC "sub" (UUID); the join key by definition. */
   id: uuid("id").primaryKey(),
   firstName: varchar("first_name", { length: 255 }).notNull(),
@@ -48,7 +49,7 @@ export const users = pgTable("users", {
  * Application roles. permission_payload is a JSON array of "Service:Action"
  * strings supporting "*" wildcards, e.g. ["RequestService:Encode", "*:*"].
  */
-export const roles = pgTable("roles", {
+export const roles = appSchema.table("roles", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 100 }).notNull().unique(),
   description: text("description").notNull(),
@@ -61,8 +62,8 @@ export const roles = pgTable("roles", {
     .defaultNow(),
 });
 
-/** Join table — users N --- M roles. */
-export const userRoles = pgTable(
+/** Join table - users N --- M roles. */
+export const userRoles = appSchema.table(
   "user_roles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -72,7 +73,7 @@ export const userRoles = pgTable(
     roleId: uuid("role_id")
       .notNull()
       .references(() => roles.id),
-    /** Who granted the role (accountability) — self reference. */
+    /** Who granted the role (accountability) - self reference. */
     assignedBy: uuid("assigned_by")
       .notNull()
       .references((): AnyPgColumn => users.id),

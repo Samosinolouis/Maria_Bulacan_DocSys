@@ -1,5 +1,5 @@
 /**
- * [A] SHARED PLATFORM — Notifications (in-app only)
+ * [A] SHARED PLATFORM - Notifications (in-app only)
  *
  * Notifications are IN-APP ONLY (FR-51). Email/SMS is out of scope; if ever
  * added, a notification_deliveries table fans out from here without altering
@@ -7,7 +7,6 @@
  */
 
 import {
-  pgTable,
   uuid,
   varchar,
   text,
@@ -16,12 +15,13 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
+import { appSchema } from "./schema.ts";
 import { users } from "./platform.ts";
 import { requests, documents } from "./document.ts";
 import { events } from "./booking.ts";
 import { notificationTypeEnum } from "./enums.ts";
 
-export const notifications = pgTable(
+export const notifications = appSchema.table(
   "notifications",
   {
     id: uuid("id").primaryKey().defaultRandom(),

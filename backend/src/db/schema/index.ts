@@ -5,6 +5,9 @@
  * migrations and by the Drizzle client for typed queries.
  */
 
+// Namespace - every table/enum below lives under `app` (Keycloak owns `public`)
+export { appSchema } from "./schema.ts";
+
 // Shared enums
 export * from "./enums.ts";
 
@@ -20,6 +23,7 @@ export {
   holidays,
   requests,
   requestAttachments,
+  folders,
   documents,
   documentAttachments,
   transmissions,

@@ -1,0 +1,1 @@
+CREATE INDEX "events_active_bookings_index" ON "app"."events" USING btree ("venue_id","event_date","end_time") WHERE "app"."events"."status" = 'CONFIRMED';

@@ -2,17 +2,17 @@
  * Shared PostgreSQL Enum Types (schema.txt conventions)
  *
  * Enum values are listed in schema.txt comments; [NFR-21] we enforce them via
- * real PostgreSQL enum types — never free strings.
+ * real PostgreSQL enum types - never free strings.
  */
 
-import { pgEnum } from "drizzle-orm/pg-core";
+import { appSchema } from "./schema.ts";
 
 // ============================================================
 // [A] SHARED PLATFORM
 // ============================================================
 
-/** Notification types — starter set, extend as features land. */
-export const notificationTypeEnum = pgEnum("notification_type", [
+/** Notification types - starter set, extend as features land. */
+export const notificationTypeEnum = appSchema.enum("notification_type", [
   "EVENT_REMINDER",
   "EVENT_UPDATED",
   "EVENT_CANCELLED",
@@ -27,7 +27,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
 // ============================================================
 
 /** How a request arrived at the office. */
-export const requestChannelEnum = pgEnum("request_channel", [
+export const requestChannelEnum = appSchema.enum("request_channel", [
   "WALK_IN",
   "MAIL",
   "COURIER",
@@ -35,7 +35,7 @@ export const requestChannelEnum = pgEnum("request_channel", [
 ]);
 
 /** Request priority. */
-export const requestPriorityEnum = pgEnum("request_priority", [
+export const requestPriorityEnum = appSchema.enum("request_priority", [
   "NORMAL",
   "HIGH",
   "URGENT",
@@ -47,7 +47,7 @@ export const requestPriorityEnum = pgEnum("request_priority", [
  *   -> PREPARATION -> REVIEW -> APPROVED | ENDORSED | DENIED
  *   -> TRANSMITTED -> CLOSED
  */
-export const requestStatusEnum = pgEnum("request_status", [
+export const requestStatusEnum = appSchema.enum("request_status", [
   "RECEIVED",
   "SCREENING",
   "RETURNED_FOR_COMPLIANCE",
@@ -61,13 +61,13 @@ export const requestStatusEnum = pgEnum("request_status", [
 ]);
 
 /** Kind of file uploaded against a request. */
-export const requestAttachmentKindEnum = pgEnum("request_attachment_kind", [
+export const requestAttachmentKindEnum = appSchema.enum("request_attachment_kind", [
   "INCOMING_LETTER",
   "ANNEX",
 ]);
 
 /** Output-document lifecycle status. */
-export const documentStatusEnum = pgEnum("document_status", [
+export const documentStatusEnum = appSchema.enum("document_status", [
   "DRAFTING",
   "UNDER_REVIEW",
   "APPROVED",
@@ -77,21 +77,21 @@ export const documentStatusEnum = pgEnum("document_status", [
 ]);
 
 /** Kind of file uploaded against an output document. */
-export const documentAttachmentKindEnum = pgEnum("document_attachment_kind", [
+export const documentAttachmentKindEnum = appSchema.enum("document_attachment_kind", [
   "DRAFT",
   "SIGNED_FINAL",
   "TRANSMISSION_PROOF",
 ]);
 
 /** Transmission dispatch method. */
-export const transmissionMethodEnum = pgEnum("transmission_method", [
+export const transmissionMethodEnum = appSchema.enum("transmission_method", [
   "PICKUP",
   "COURIER",
   "EMAIL",
 ]);
 
 /** Append-only document audit-trail action types. */
-export const documentLogActionEnum = pgEnum("document_log_action", [
+export const documentLogActionEnum = appSchema.enum("document_log_action", [
   "RECEIVED",
   "SCREENED_PASS",
   "SCREENED_FAIL",
@@ -114,14 +114,14 @@ export const documentLogActionEnum = pgEnum("document_log_action", [
 // ============================================================
 
 /** Event booking status. CANCELLED events never block a slot (FR-42). */
-export const eventStatusEnum = pgEnum("event_status", [
+export const eventStatusEnum = appSchema.enum("event_status", [
   "CONFIRMED",
   "TENTATIVE",
   "CANCELLED",
 ]);
 
 /** Append-only booking audit-trail action types. */
-export const activityLogActionEnum = pgEnum("activity_log_action", [
+export const activityLogActionEnum = appSchema.enum("activity_log_action", [
   "EVENT_CREATED",
   "EVENT_UPDATED",
   "EVENT_CANCELLED",

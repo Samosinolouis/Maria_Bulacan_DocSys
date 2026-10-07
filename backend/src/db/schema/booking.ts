@@ -1,5 +1,5 @@
 /**
- * [C] BOOKING MODULE — Centralized scheduling
+ * [C] BOOKING MODULE - Centralized scheduling
  *
  * Tables: venues, events, event_attendees, activity_logs.
  *
@@ -10,7 +10,6 @@
  */
 
 import {
-  pgTable,
   uuid,
   varchar,
   text,
@@ -22,12 +21,14 @@ import {
   index,
   unique,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
+import { appSchema } from "./schema.ts";
 import { users } from "./platform.ts";
 import { eventStatusEnum, activityLogActionEnum } from "./enums.ts";
 
 /** Lookup: municipal venues. */
-export const venues = pgTable("venues", {
+export const venues = appSchema.table("venues", {
   id: uuid("id").primaryKey().defaultRandom(),
   code: varchar("code", { length: 50 }).notNull().unique(),
   /** Display label. */
@@ -42,7 +43,7 @@ export const venues = pgTable("venues", {
 });
 
 /** Meeting / event bookings. */
-export const events = pgTable(
+export const events = appSchema.table(
   "events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -81,11 +82,20 @@ export const events = pgTable(
     index("events_venue_id_event_date_index").on(table.venueId, table.eventDate),
     // Calendar / day views.
     index("events_event_date_index").on(table.eventDate),
+    /**
+     * Active-booking lookups: "does this venue still have a confirmed booking
+     * that has not ended?" (`Venue.activeBookings`, and the FR-42 overlap
+     * check). Partial on CONFIRMED so the index stays small - a CANCELLED or
+     * TENTATIVE row can never be an active booking.
+     */
+    index("events_active_bookings_index")
+      .on(table.venueId, table.eventDate, table.endTime)
+      .where(sql`${table.status} = 'CONFIRMED'`),
   ],
 );
 
 /** Join: required attendees (events N --- M users). */
-export const eventAttendees = pgTable(
+export const eventAttendees = appSchema.table(
   "event_attendees",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -107,8 +117,8 @@ export const eventAttendees = pgTable(
   ],
 );
 
-/** APPEND-ONLY audit trail (booking module) — [NFR-09] no UPDATE/DELETE. */
-export const activityLogs = pgTable(
+/** APPEND-ONLY audit trail (booking module) - [NFR-09] no UPDATE/DELETE. */
+export const activityLogs = appSchema.table(
   "activity_logs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
