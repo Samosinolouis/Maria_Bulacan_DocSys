@@ -17,7 +17,7 @@ class NoOpSpan implements ISpan {
   recordException(): void {}
 }
 
-/** Silent telemetry — used in tests and when telemetry is disabled. */
+/** Silent telemetry - used in tests and when telemetry is disabled. */
 export class NoOpTelemetryService implements ITelemetryPort {
   trackEvent(): void {}
   trackError(): void {}
@@ -30,7 +30,7 @@ export class NoOpTelemetryService implements ITelemetryPort {
   }
 }
 
-/** Console telemetry — development fallback when OpenTelemetry is unavailable. */
+/** Console telemetry - development fallback when OpenTelemetry is unavailable. */
 export class ConsoleTelemetryService implements ITelemetryPort {
   constructor(private readonly serviceName: string = "docsys-api") {}
 

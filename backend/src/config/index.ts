@@ -3,7 +3,7 @@
  *
  * Centralizes all environment-based configuration and validates required
  * variables at startup. [SOLID:SRP] [NFR-05] No credentials ever reach the
- * application database — only Keycloak/B2 references live here.
+ * application database - only Keycloak/MinIO references live here.
  */
 
 import dotenv from "dotenv";
@@ -33,7 +33,7 @@ export const config = {
   /** PostgreSQL */
   databaseUrl: requireEnv("DATABASE_URL"),
 
-  /** Keycloak / OIDC — authentication only (FR-01, NFR-05) */
+  /** Keycloak / OIDC - authentication only (FR-01, NFR-05) */
   keycloak: {
     realmUrl: requireEnv("KEYCLOAK_REALM_URL"),
     clientId: requireEnv("KEYCLOAK_CLIENT_ID"),
@@ -41,16 +41,17 @@ export const config = {
     jwksUri: requireEnv("KEYCLOAK_JWKS_URI"),
   },
 
-  /** Backblaze B2 — object storage for all uploaded files (NFR-06, NFR-15) */
-  b2: {
-    applicationKeyId: optionalEnv("B2_APPLICATION_KEY_ID", ""),
-    applicationKey: optionalEnv("B2_APPLICATION_KEY", ""),
-    bucketName: optionalEnv("B2_BUCKET_NAME", "docsys-attachments"),
-    bucketId: optionalEnv("B2_BUCKET_ID", ""),
-    endpoint: optionalEnv("B2_ENDPOINT", ""),
-    region: optionalEnv("B2_REGION", "us-west-004"),
+  /** MinIO - S3-compatible object storage for all uploaded files (NFR-06, NFR-15) */
+  minio: {
+    /** Base URL or host[:port] of the MinIO S3 API. */
+    endpoint: optionalEnv("MINIO_ENDPOINT", "http://localhost:9000"),
+    accessKey: optionalEnv("MINIO_ACCESS_KEY", "minioadmin"),
+    secretKey: optionalEnv("MINIO_SECRET_KEY", "minioadmin"),
+    bucketName: optionalEnv("MINIO_BUCKET_NAME", "docsys-attachments"),
+    region: optionalEnv("MINIO_REGION", "us-east-1"),
+    useSsl: optionalEnv("MINIO_USE_SSL", "false") === "true",
     presignExpirySeconds: Number.parseInt(
-      optionalEnv("B2_PRESIGN_EXPIRY_SECONDS", "900"),
+      optionalEnv("MINIO_PRESIGN_EXPIRY_SECONDS", "900"),
       10,
     ),
   },
@@ -65,6 +66,20 @@ export const config = {
       .map((m) => m.trim())
       .filter(Boolean),
     maxBytes: Number.parseInt(optionalEnv("UPLOAD_MAX_BYTES", "26214400"), 10),
+  },
+
+  /** RA 11032 SLA policy (FR-38) */
+  sla: {
+    /** Requests within this many hours of their deadline are "at risk". */
+    warningHours: Number.parseInt(optionalEnv("SLA_WARNING_HOURS", "24"), 10),
+  },
+
+  /** Browser access - the frontend origins allowed to call this API. */
+  cors: {
+    origins: optionalEnv("CORS_ORIGINS", "http://localhost:3000")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   },
 
   /** Feature flags (runtime toggles, distinct from config) */

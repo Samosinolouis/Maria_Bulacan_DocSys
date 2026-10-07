@@ -1,18 +1,18 @@
 /**
- * Object Storage Port Interface (Backblaze B2)
+ * Object Storage Port Interface (MinIO)
  *
  * Abstracts object storage so the application never depends on a specific
- * provider SDK. [SOLID:DIP] Services depend on this interface, not on B2.
+ * provider SDK. [SOLID:DIP] Services depend on this interface, not on MinIO.
  *
- * [NFR-06] B2 access uses application-scoped credentials server-side only;
+ * [NFR-06] MinIO access uses application-scoped credentials server-side only;
  * downloads are delivered via short-lived presigned URLs.
  * [NFR-08] Every uploaded file carries a server-computed SHA-256 checksum.
- * NOTE: Storage is NOT transactional — it is a side effect, never inside a UoW.
+ * NOTE: Storage is NOT transactional - it is a side effect, never inside a UoW.
  */
 
-/** Input for uploading a single object (upload-only — the app never generates). */
+/** Input for uploading a single object (upload-only - the app never generates). */
 export interface UploadObjectInput {
-  /** B2 object key (storage path). Caller builds deterministic keys. */
+  /** MinIO object key (storage path). Caller builds deterministic keys. */
   key: string;
   /** Raw file bytes as received from the client. */
   body: Buffer | Uint8Array;
@@ -26,13 +26,13 @@ export interface UploadObjectInput {
 
 /** Result of a successful upload. */
 export interface StoredObject {
-  /** B2 object key. */
+  /** MinIO object key. */
   key: string;
   /** Bucket the object was written to. */
   bucketName: string;
   /** Object size in bytes. */
   sizeBytes: number;
-  /** Server-computed SHA-256 checksum (hex) — tamper-evidence. */
+  /** Server-computed SHA-256 checksum (hex) - tamper-evidence. */
   checksum: string;
   /** Server time the object was stored. */
   uploadTimestamp: Date;
@@ -40,10 +40,12 @@ export interface StoredObject {
 
 /** Options for generating a short-lived download URL. */
 export interface PresignOptions {
-  /** Lifetime of the URL in seconds. Defaults to config.b2.presignExpirySeconds. */
+  /** Lifetime of the URL in seconds. Defaults to config.minio.presignExpirySeconds. */
   expiresInSeconds?: number;
   /** Suggested download filename (Content-Disposition). */
   fileName?: string;
+  /** true = inline preview (FR-34); false or omitted = attachment download. */
+  inline?: boolean;
 }
 
 /** Object Storage Port Contract. */

@@ -5,14 +5,15 @@
  */
 
 import { config } from "./config/index.js";
-import { buildServer } from "./server.js";
+import { buildServer, startSlaAlertScheduler } from "./server.js";
 
 async function main() {
   const app = await buildServer();
 
   try {
     const address = await app.listen({ port: config.port, host: config.host });
-    console.log(`🚀 Santa Maria Bulacan DMS API running at ${address}/graphql`);
+    console.log(`Santa Maria Bulacan DMS API running at ${address}/graphql`);
+    startSlaAlertScheduler();
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -7,7 +7,7 @@
  * [SOLID:SRP]  Token verification + account/role management only.
  * [SOLID:DIP]  Business layer imports IIdentityProviderPort, not this class.
  * [OWASP:A07]  Validates algorithm, issuer, and signature (RS256).
- * [OWASP:A02]  Uses the server-side Admin API — no client-side crypto.
+ * [OWASP:A02]  Uses the server-side Admin API - no client-side crypto.
  * [NFR-05]     No passwords are ever stored in the application database.
  */
 
