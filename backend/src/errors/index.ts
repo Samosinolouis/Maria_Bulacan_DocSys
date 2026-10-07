@@ -2,7 +2,7 @@
  * Application Error Classes
  *
  * Structured, typed error hierarchy for business logic. These are NOT GraphQL
- * errors — the error handler converts them into safe GraphQL responses.
+ * errors - the error handler converts them into safe GraphQL responses.
  *
  * [SOLID:SRP] Each class is one failure category.
  * [SOLID:OCP] New error types extend AppError without modifying it.
@@ -89,7 +89,7 @@ export class NotFoundError extends AppError {
   }
 }
 
-/** Authentication failure — missing or invalid credentials (401). */
+/** Authentication failure - missing or invalid credentials (401). */
 export class AuthenticationError extends AppError {
   constructor(message = "Authentication required") {
     super(message, {
@@ -100,7 +100,7 @@ export class AuthenticationError extends AppError {
   }
 }
 
-/** Authorization failure — insufficient permissions (403) [FR-05]. */
+/** Authorization failure - insufficient permissions (403) [FR-05]. */
 export class ForbiddenError extends AppError {
   constructor(message = "You do not have permission to perform this action") {
     super(message, {
@@ -123,7 +123,7 @@ export class ValidationError extends AppError {
   }
 }
 
-/** Conflict — resource already exists (409). */
+/** Conflict - resource already exists (409). */
 export class ConflictError extends AppError {
   constructor(resource: string, details?: Record<string, unknown>) {
     super(`${resource} already exists`, {

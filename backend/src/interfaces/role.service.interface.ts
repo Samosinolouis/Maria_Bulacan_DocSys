@@ -15,9 +15,9 @@ export interface CreateRoleInput {
 }
 
 export interface UpdateRoleInput {
-  name?: string;
-  description?: string;
-  permissionPayload?: string[];
+  name?: string | null;
+  description?: string | null;
+  permissionPayload?: string[] | null;
 }
 
 export interface RoleFilter {
@@ -32,6 +32,6 @@ export interface IRoleService {
   list(args: ConnectionArgs<RoleFilter, RoleSortField>): Promise<Connection<RoleRecord>>;
 
   /** Validates every permission string against ^[\w*]+:[\w*]+$ (NFR-21). */
-  create(input: CreateRoleInput): Promise<RoleRecord>;
-  update(id: string, input: UpdateRoleInput): Promise<RoleRecord>;
+  create(actorId: string, input: CreateRoleInput): Promise<RoleRecord>;
+  update(actorId: string, id: string, input: UpdateRoleInput): Promise<RoleRecord>;
 }

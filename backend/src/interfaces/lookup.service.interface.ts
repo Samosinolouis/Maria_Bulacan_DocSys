@@ -17,7 +17,7 @@ export interface UpsertRequestTypeInput {
   name: string;
   description: string;
   prefix: string;
-  isActive?: boolean;
+  isActive?: boolean | null;
 }
 
 export interface UpsertDocumentTypeInput {
@@ -25,11 +25,11 @@ export interface UpsertDocumentTypeInput {
   name: string;
   description: string;
   prefix: string;
-  isActive?: boolean;
+  isActive?: boolean | null;
 }
 
 export interface UpsertHolidayInput {
-  /** YYYY-MM-DD — one row per date. */
+  /** YYYY-MM-DD - one row per date. */
   holidayDate: string;
   name: string;
 }
@@ -38,7 +38,7 @@ export interface ILookupService {
   listRequestTypes(includeInactive?: boolean): Promise<RequestTypeRecord[]>;
   listDocumentTypes(includeInactive?: boolean): Promise<DocumentTypeRecord[]>;
 
-  /** Holidays within [from, to) — used by SLA computation (FR-09). */
+  /** Holidays within [from, to) - used by SLA computation (FR-09). */
   listHolidays(from?: Date | null, to?: Date | null): Promise<HolidayRecord[]>;
 
   createRequestType(input: UpsertRequestTypeInput): Promise<RequestTypeRecord>;

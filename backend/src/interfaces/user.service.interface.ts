@@ -27,14 +27,14 @@ export interface ProvisionUserInput {
 }
 
 export interface UpdateUserProfileInput {
-  firstName?: string;
+  firstName?: string | null;
   middleName?: string | null;
-  lastName?: string;
+  lastName?: string | null;
   suffix?: string | null;
-  email?: string;
-  contactNo?: string;
-  office?: string;
-  position?: string;
+  email?: string | null;
+  contactNo?: string | null;
+  office?: string | null;
+  position?: string | null;
 }
 
 export interface UserFilter {
@@ -49,14 +49,20 @@ export interface IUserService {
   /** Create-or-update the shadow user record from an authenticated identity. */
   provisionFromIdentity(identity: AuthUser, input: ProvisionUserInput): Promise<UserRecord>;
 
+  /**
+   * Get-or-provision the shadow record on login (FR-02): existing records are
+   * returned untouched; missing ones are materialized from the verified token.
+   */
+  ensureProvisioned(identity: AuthUser): Promise<UserRecord>;
+
   getById(id: string): Promise<UserRecord | null>;
   getByIds(ids: string[]): Promise<UserRecord[]>;
   getByEmail(email: string): Promise<UserRecord | null>;
   list(args: ConnectionArgs<UserFilter, UserSortField>): Promise<Connection<UserRecord>>;
 
-  updateProfile(id: string, input: UpdateUserProfileInput): Promise<UserRecord>;
+  updateProfile(actorId: string, id: string, input: UpdateUserProfileInput): Promise<UserRecord>;
 
-  /** Soft deactivate — never delete (FR-03, NFR-12). */
+  /** Soft deactivate - never delete (FR-03, NFR-12). */
   deactivate(actorId: string, userId: string): Promise<UserRecord>;
   reactivate(actorId: string, userId: string): Promise<UserRecord>;
 

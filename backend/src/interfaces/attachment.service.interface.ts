@@ -2,7 +2,7 @@
  * Attachment Service Interface
  *
  * Business-logic abstraction for uploads (upload-only) and secure downloads.
- * Composes the IObjectStoragePort (B2) as a NON-transactional side effect.
+ * Composes the IObjectStoragePort (MinIO) as a NON-transactional side effect.
  *
  * [FR-10] Whitelisted MIME, configured size limit, server-computed SHA-256.
  * [FR-34] Inline PDF preview / download via short-lived presigned URLs.
@@ -57,12 +57,14 @@ export interface IAttachmentService {
 
   /** Short-lived presigned URL for a request attachment (FR-34, NFR-06). */
   getRequestAttachmentDownload(
+    actorId: string,
     attachmentId: string,
     inline?: boolean,
   ): Promise<DownloadTicket>;
 
   /** Short-lived presigned URL for a document attachment (FR-34, NFR-06). */
   getDocumentAttachmentDownload(
+    actorId: string,
     attachmentId: string,
     inline?: boolean,
   ): Promise<DownloadTicket>;

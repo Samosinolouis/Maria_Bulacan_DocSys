@@ -2,7 +2,7 @@
  * Permission Constants [NFR-21]
  *
  * Permission strings are defined ONCE as code constants and validated on
- * write. Format: ^[\\w*]+:[\\w*]+$ — "Service:Action" with "*" wildcards
+ * write. Format: ^[\\w*]+:[\\w*]+$ - "Service:Action" with "*" wildcards
  * ("Service:*" and "*:*"). Computed as the union of the actor's roles'
  * permission_payload (FR-05).
  */
@@ -55,6 +55,11 @@ export const Permissions = {
     Read: "AttachmentService:Read",
     Download: "AttachmentService:Download",
     All: "AttachmentService:*",
+  },
+  FolderService: {
+    Read: "FolderService:Read",
+    Create: "FolderService:Create",
+    All: "FolderService:*",
   },
   ReportService: {
     Read: "ReportService:Read",

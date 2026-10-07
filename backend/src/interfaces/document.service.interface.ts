@@ -6,12 +6,16 @@
  * and completion & archiving (Step 6).
  */
 
-import type { DocumentRecord } from "./document.repository.interface.js";
+import type {
+  DocumentRecord,
+  DocumentLogRecord,
+  TransmissionRecord,
+} from "./document.repository.interface.js";
 import type { Connection, ConnectionArgs } from "./common.interface.js";
 
 export type DocumentStatus = DocumentRecord["status"];
 
-/** Step 3 — create an output document, linked or standalone (FR-16..18). */
+/** Step 3 - create an output document, linked or standalone (FR-16..18). */
 export interface PrepareDocumentInput {
   /** NULL = issued without request (sua sponte EO / MO). */
   requestId?: string | null;
@@ -19,10 +23,10 @@ export interface PrepareDocumentInput {
   title: string;
   /** Drafting officer. */
   assignedTo?: string | null;
-  signatoryRequired?: boolean;
+  signatoryRequired?: boolean | null;
 }
 
-/** Step 4 — approve / endorse / deny (FR-22..25). */
+/** Step 4 - approve / endorse / deny (FR-22..25). */
 export type ReviewDecision = "APPROVED" | "ENDORSED" | "DENIED";
 
 export interface ReviewDocumentInput {
@@ -32,17 +36,17 @@ export interface ReviewDocumentInput {
   denialReason?: string | null;
   decisionNotes?: string | null;
   /** Whether the Mayor's signature is required before transmission. */
-  signatoryRequired?: boolean;
+  signatoryRequired?: boolean | null;
 }
 
-/** Step 4 — record the Mayor signature event (FR-25). */
+/** Step 4 - record the Mayor signature event (FR-25). */
 export interface SignDocumentInput {
   documentId: string;
   signedBy: string;
   signedAt?: Date | null;
 }
 
-/** Step 5 — record a transmission (FR-26..28). */
+/** Step 5 - record a transmission (FR-26..28). */
 export interface TransmitDocumentInput {
   documentId: string;
   recipientName: string;
@@ -55,11 +59,13 @@ export interface TransmitDocumentInput {
   proofAttachmentId?: string | null;
 }
 
-/** Step 6 — close the request as read-only (FR-29..31). */
+/** Step 6 - close the request as read-only (FR-29..31). */
 export interface CloseRequestInput {
   requestId: string;
   /** Final signed copy must be uploaded before closing (FR-29). */
   finalAttachmentId?: string | null;
+  /** Optional archive folder: every document of the request is filed into it. */
+  folderId?: string | null;
   notes?: string | null;
 }
 
@@ -68,6 +74,8 @@ export interface DocumentFilter {
   documentTypeId?: string | null;
   requestId?: string | null;
   assignedTo?: string | null;
+  /** Documents filed into an archive folder. */
+  folderId?: string | null;
 }
 
 export type DocumentSortField = "CREATED_AT" | "CONTROL_NO" | "TITLE" | "STATUS";
@@ -78,11 +86,18 @@ export interface IDocumentService {
   listByRequest(requestId: string): Promise<DocumentRecord[]>;
   list(args: ConnectionArgs<DocumentFilter, DocumentSortField>): Promise<Connection<DocumentRecord>>;
 
+  /** Append-only audit trail for a request, newest-first (FR-39, FR-40). */
+  listLogsByRequest(requestId: string): Promise<DocumentLogRecord[]>;
+  /** Append-only audit trail for a document, newest-first (FR-39, FR-40). */
+  listLogsByDocument(documentId: string): Promise<DocumentLogRecord[]>;
+  /** Dispatch records for a document (FR-26; multiple allowed). */
+  listTransmissions(documentId: string): Promise<TransmissionRecord[]>;
+
   prepare(actorId: string, input: PrepareDocumentInput): Promise<DocumentRecord>;
   /** Submit a draft for review: document UNDER_REVIEW + request REVIEW (FR-21). */
   submitForReview(actorId: string, documentId: string): Promise<DocumentRecord>;
   review(actorId: string, input: ReviewDocumentInput): Promise<DocumentRecord>;
-  sign(input: SignDocumentInput): Promise<DocumentRecord>;
+  sign(actorId: string, input: SignDocumentInput): Promise<DocumentRecord>;
   transmit(actorId: string, input: TransmitDocumentInput): Promise<DocumentRecord>;
   close(actorId: string, input: CloseRequestInput): Promise<DocumentRecord>;
 }

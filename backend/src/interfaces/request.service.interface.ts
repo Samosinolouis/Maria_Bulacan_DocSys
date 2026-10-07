@@ -12,23 +12,23 @@ export type RequestChannel = RequestRecord["channel"];
 export type RequestPriority = RequestRecord["priority"];
 export type RequestStatus = RequestRecord["status"];
 
-/** Step 1 — encode an incoming request and issue a control number (FR-07..11). */
+/** Step 1 - encode an incoming request and issue a control number (FR-07..11). */
 export interface EncodeRequestInput {
   requestTypeId: string;
   title: string;
   requestingParty: string;
   originOffice: string;
   channel: RequestChannel;
-  priority?: RequestPriority;
+  priority?: RequestPriority | null;
   /** IRL receipt date; defaults to now when omitted. */
   receivedAt?: Date | null;
 }
 
-/** Step 2 — screening decision (FR-12..15). */
+/** Step 2 - screening decision (FR-12..15). */
 export interface ScreenRequestInput {
   requestId: string;
   passed: boolean;
-  /** Specific deficiencies when failing — required for RETURNED_FOR_COMPLIANCE. */
+  /** Specific deficiencies when failing - required for RETURNED_FOR_COMPLIANCE. */
   deficiencies?: string[] | null;
   notes?: string | null;
 }
