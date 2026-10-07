@@ -1,7 +1,7 @@
 ================================================================================
 SANTA MARIA BULACAN DOCUMENT MANAGEMENT SYSTEM (DMS)
 Municipal Administrator's Office - Municipality of Santa Maria, Bulacan
-DATABASE SCHEMA - FINAL (18 TABLES)
+DATABASE SCHEMA - FINAL (19 TABLES)
 ================================================================================
 
 GROUPS
@@ -85,7 +85,7 @@ TABLE notifications                  -- system notifications (in-app only)
 -- of truth; delivery is an extension, not a schema change.
 
 ================================================================================
-[B] DOCUMENT MODULE (10 TABLES)
+[B] DOCUMENT MODULE (11 TABLES)
 ================================================================================
 
 TABLE request_types                  -- lookup: what came IN
@@ -151,7 +151,7 @@ TABLE request_attachments
 - id                PK
 - request_id        FK -> requests
 - kind              ENUM              -- INCOMING_LETTER / ANNEX
-- storage_key                         -- B2 object key
+- storage_key                         -- MinIO object key
 - bucket_name
 - original_name
 - mime_type                           -- whitelist: application/pdf, docx, xlsx
@@ -160,6 +160,21 @@ TABLE request_attachments
 - uploaded_by       FK -> users       -- system NEVER generates; upload-only
 - created_at
 - INDEX (request_id)
+
+TABLE folders                      -- archive folder tree (folders 1 --- N docs)
+- id                PK
+- parent_id         FK -> folders, NULLABLE     -- NULL = root-level folder
+- path                              -- denormalized "/"-separated path, derived
+                                     --   as <parent.path>/<name>; root: <name>
+- name                              -- unique among siblings; "/" not allowed
+- created_by        FK -> users
+- created_at
+- UNIQUE (path)                      -- follows from sibling uniqueness
+- UNIQUE (parent_id, name)           -- sibling names (non-root rows)
+- UNIQUE (name) WHERE parent_id IS NULL   -- partial index for root siblings
+- INDEX (parent_id)
+-- itemCount (subfolders + documents at one level) is computed on read,
+-- never stored.
 
 TABLE documents                      -- ONE OUTPUT ARTIFACT (0..N per request)
 - id                PK
@@ -178,6 +193,8 @@ TABLE documents                      -- ONE OUTPUT ARTIFACT (0..N per request)
 - decision_notes
 - decided_by        FK -> users, NULLABLE
 - decided_at
+- folder_id         FK -> folders, NULLABLE     -- set when filed at close
+                                                --   (FR-29..31)
 - created_by        FK -> users
 - created_at, updated_at
 - INDEX (request_id)
@@ -308,6 +325,8 @@ RELATIONSHIPS SUMMARY
   request_types  1 --- N requests        document_types 1 --- N documents
   requests       1 --- N request_attachments
   requests       1 --- N documents (nullable direction: docs may be standalone)
+  folders        1 --- N folders (self, via parent_id)
+  folders        1 --- N documents (filed at close)
   documents      1 --- N document_attachments
   documents      1 --- N transmissions
   requests/documents 1 --- N document_logs

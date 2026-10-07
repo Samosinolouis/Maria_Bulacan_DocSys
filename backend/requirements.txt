@@ -3,13 +3,13 @@ SANTA MARIA BULACAN DOCUMENT MANAGEMENT SYSTEM (DMS)
 Municipal Administrator's Office - Municipality of Santa Maria, Bulacan
 SCOPE OF THE PROJECT / FUNCTIONAL / NON-FUNCTIONAL REQUIREMENTS - FINAL
 ================================================================================
-Companion document: schema.txt (18-table database schema)
+Companion document: schema.txt (19-table database schema)
 
 TECH STACK CONTEXT
   - Keycloak ............ authentication only (OIDC); no passwords in app DB
   - Shadow users ........ business DB mirrors Keycloak identities for fast,
                           customized querying; authorization via roles
-  - Backblaze B2 ........ object storage for all uploaded files
+  - MinIO ............... object storage for all uploaded files
   - Virtual Machine ..... hosts application server + database (single node)
   - Indexing ............ all tables indexed; inverted (full-text) index on
                           documents for search
@@ -44,8 +44,8 @@ scheduling module.
       grounds; Mayor signature recording.
   7.  Transmission - dispatch records (recipient, office, method, proof of
       transmission upload).
-  8.  Completion & archiving - final signed copy upload, closing, permanent
-      read-only retrieval.
+  8.  Completion & archiving - final signed copy upload, archive folder
+      filing, closing, permanent read-only retrieval.
   9.  Search & retrieval - full-text (inverted index) and metadata search;
       filtering; inline PDF preview; download.
   10. Dashboards & reports - workload metrics, SLA/overdue monitoring,
@@ -57,7 +57,7 @@ scheduling module.
       schedule viewing, reminders as in-app notifications.
   13. In-app notifications - notification center with unread tracking and
       deep links; NO email/SMS delivery in this release.
-  14. Hosting - single VM (application server + database); Backblaze B2 object
+  14. Hosting - single VM (application server + database); MinIO object
       storage for files; daily off-site backups.
 
 1.2 OUT OF SCOPE
@@ -173,7 +173,8 @@ F. TRANSMISSION (STEP 5)
 
 G. COMPLETION & ARCHIVING (STEP 6)
   FR-29  Clerks shall upload the final signed copy (SIGNED_FINAL attachment)
-         prior to closing.
+         prior to closing; closing shall support filing the request's
+         documents into an archive folder.
   FR-30  A request shall be closable from APPROVED, ENDORSED, DENIED, or
          TRANSMITTED; denied requests may close directly without transmission.
   FR-31  Closed records shall become read-only and permanently retrievable.
@@ -254,7 +255,7 @@ L. NOTIFICATIONS
 3.2 SECURITY
   NFR-05  All authentication shall be delegated to Keycloak (OIDC); no
           passwords shall be stored in the application database.
-  NFR-06  All traffic shall be TLS-encrypted; B2 access shall use
+  NFR-06  All traffic shall be TLS-encrypted; MinIO access shall use
           application-scoped credentials server-side only, with downloads
           delivered via short-lived presigned URLs.
   NFR-07  Authorization shall be enforced server-side at the service layer;
@@ -276,8 +277,8 @@ L. NOTIFICATIONS
   NFR-13  Target availability of 99% during office hours (single-VM
           deployment by design).
   NFR-14  Database backups shall run at least daily with off-site copies in
-          B2; RPO <= 24 h, RTO <= 4 h.
-  NFR-15  File durability shall rely on B2 retention/versioning; checksum
+          MinIO; RPO <= 24 h, RTO <= 4 h.
+  NFR-15  File durability shall rely on MinIO retention/versioning; checksum
           reconciliation shall detect orphaned or corrupted objects.
 
 3.4 USABILITY & COMPLIANCE
@@ -310,6 +311,6 @@ L. NOTIFICATIONS
   [B] DOCUMENT MODULE ....... FR-07..40 (six-step workflow, search, reports,
                                audit trail)
   [C] BOOKING MODULE ........ FR-41..46 (scheduling + activity_logs)
-  Security/reliability NFRs .. 05..15 map to Keycloak, B2, checksums, and the
+  Security/reliability NFRs .. 05..15 map to Keycloak, MinIO, checksums, and the
                                append-only grant model in schema.txt
 ================================================================================
