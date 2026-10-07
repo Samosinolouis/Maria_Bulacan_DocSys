@@ -1,35 +1,74 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useSessionServiceMethods } from '@/hooks/useDomainServices';
-import { ShieldCheck, ArrowRight, Lock } from 'lucide-react';
+import { ShieldCheck, Loader2, Lock, RotateCcw } from 'lucide-react';
 import GovMasthead from '@/components/GovMasthead';
 import GovFooter from '@/components/GovFooter';
 
 /**
- * Sign-in desk. Authentication is delegated to Keycloak through NextAuth
- * (authorization-code + PKCE, server-side). No credentials are handled by this
- * page: `login()` starts the OIDC redirect and Keycloak collects the password.
+ * Read the return target at call time rather than through `useSearchParams`,
+ * which would force a Suspense fallback and empty the prerendered HTML.
+ */
+function returnTarget(): string {
+  return new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
+}
+
+/**
+ * Sign-in desk.
+ *
+ * Authentication is mandatory, so this route presents no form and no button: it
+ * hands the browser straight to Keycloak (authorization-code + PKCE) as soon as
+ * the local session is known to be absent, and only renders a status screen
+ * during the hand-off. Keycloak collects the password; no credential ever
+ * passes through this application.
+ *
+ * Why the hand-off is client-side: Auth.js v5 only STARTS the flow on
+ * `POST /api/auth/signin/:provider` with a verified CSRF token. A `GET` on that
+ * endpoint merely renders the built-in sign-in page (`AuthInternal` dispatches
+ * `render.signin` for GET and `actions.signIn` for POST), so a server-side
+ * `redirect('/api/auth/signin/keycloak')` cannot work. `login()` performs the
+ * CSRF exchange and then navigates the browser.
  */
 function LoginDesk() {
+  const router = useRouter();
   const { login } = useSessionServiceMethods();
-  const [loading, setLoading] = useState(false);
+  const { status } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
 
-  const handleSignIn = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Read the return target at click time so the page stays fully
-      // prerenderable (useSearchParams would force a Suspense fallback).
-      const returnTo =
-        new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
-      await login(returnTo);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start the sign-in flow.');
-      setLoading(false);
+  useEffect(() => {
+    // Wait for the session read: an already-authenticated visitor (for example
+    // one who followed a bookmarked /login link) must be returned to the app
+    // rather than sent through the identity provider again.
+    if (status === 'loading') return;
+
+    if (status === 'authenticated') {
+      router.replace(returnTarget());
+      return;
     }
+
+    // React strict mode runs effects twice in development; only the first pass
+    // may open an authorization request.
+    if (started.current) return;
+    started.current = true;
+
+    login(returnTarget()).catch((err: unknown) => {
+      started.current = false;
+      setError(err instanceof Error ? err.message : 'Unable to reach the identity provider.');
+    });
+  }, [status, login, router]);
+
+  const handleRetry = () => {
+    setError(null);
+    started.current = false;
+    void login(returnTarget()).catch((err: unknown) => {
+      started.current = false;
+      setError(err instanceof Error ? err.message : 'Unable to reach the identity provider.');
+    });
   };
 
   return (
@@ -114,45 +153,49 @@ function LoginDesk() {
                   PERSONNEL AUTHENTICATION DESK
                 </h2>
                 <p className="text-xs text-[#64748B] mt-0.5">
-                  Sign in with your assigned municipal account. Credentials are handled by the
-                  municipality&apos;s Keycloak identity provider and never touch this application.
+                  Authentication is mandatory. You are being handed to the municipality&apos;s
+                  Keycloak identity provider, which collects your credentials and enforces the
+                  password and multi-factor policy. Nothing is entered on this screen.
                 </p>
               </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold flex items-start gap-2">
-                  <Lock size={15} className="text-[#334155] shrink-0 mt-0.5" />
-                  <span>{error}</span>
+              {error ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold flex items-start gap-2">
+                    <Lock size={15} className="text-[#334155] shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="btn-fluid w-full flex items-center justify-center gap-2 py-2.5 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow cursor-pointer"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Retry sign-in</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 text-xs">
+                  <div className="p-3.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded space-y-1.5">
+                    <div className="font-bold text-[#081E36] text-[11px] uppercase tracking-wider">
+                      Single Sign-On
+                    </div>
+                    <p className="text-[#475569] leading-relaxed">
+                      The Keycloak realm <strong>docsys</strong> issues this session. An existing
+                      municipal session is reused; otherwise you will be asked to sign in.
+                    </p>
+                  </div>
+
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F0FDF4] border border-[#86EFAC] text-[#166534] rounded text-xs font-bold"
+                  >
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Redirecting to the municipal identity provider...</span>
+                  </div>
                 </div>
               )}
-
-              <div className="space-y-4 text-xs">
-                <div className="p-3.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded space-y-1.5">
-                  <div className="font-bold text-[#081E36] text-[11px] uppercase tracking-wider">
-                    Single Sign-On
-                  </div>
-                  <p className="text-[#475569] leading-relaxed">
-                    You will be redirected to the Keycloak realm <strong>docsys</strong> to
-                    authenticate. Multi-factor and password policy are enforced there.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSignIn}
-                  disabled={loading}
-                  className="btn-fluid w-full flex items-center justify-center gap-2 py-2.5 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow cursor-pointer disabled:opacity-50"
-                >
-                  {loading ? (
-                    <span>Redirecting to Keycloak...</span>
-                  ) : (
-                    <>
-                      <span>Sign in with Keycloak</span>
-                      <ArrowRight size={14} />
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-[#E2E8F0] text-[11px] text-[#64748B] text-center">
