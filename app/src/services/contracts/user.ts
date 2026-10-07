@@ -16,6 +16,27 @@ export interface UpdateUserProfileInput {
   position?: string;
 }
 
+/**
+ * Administrative account creation (FR-01, FR-02).
+ *
+ * `temporaryPassword` is a one-time credential that Keycloak stores as
+ * temporary, forcing a change at first sign-in; the application never persists
+ * it (NFR-05).
+ */
+export interface CreateUserInput {
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  suffix?: string | null;
+  email: string;
+  contactNo: string;
+  office: string;
+  position: string;
+  /** Realm roles granted at provisioning time. */
+  roleIds?: string[] | null;
+  temporaryPassword?: string | null;
+}
+
 export interface AssignRoleInput {
   userId: string;
   roleId: string;
@@ -40,7 +61,13 @@ export interface IUserService {
   getById(id: string): Promise<User | null>;
   list(args: ConnectionArgs<UserFilter, UserSortField>): Promise<Connection<User>>;
 
-  /** Action: UserService:Update. */
+  /** Provision a new account. Action: UserService:Create. */
+  create(input: CreateUserInput): Promise<User>;
+
+  /**
+   * Action: UserService:Update for somebody else's record; the account holder
+   * may always edit their own.
+   */
   updateProfile(id: string, input: UpdateUserProfileInput): Promise<User>;
 
   /** Soft deactivation, never delete (FR-03). Action: UserService:Deactivate. */

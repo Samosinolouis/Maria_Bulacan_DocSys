@@ -19,6 +19,12 @@ export interface ActionRule {
   reason?: string;
   /** Extra grants required when a resource attribute condition holds. */
   requiresWhen?: (ctx: AuthzContext) => ActionId[];
+  /**
+   * Self-service action: when the resource carries `attributes.id` equal to the
+   * subject's own user id, the action is allowed WITHOUT the grant. Used where
+   * the backend lets an account holder act on their own record (FR-03).
+   */
+  allowSelf?: boolean;
 }
 
 /** Read a resource attribute (deny when absent). */
@@ -86,6 +92,13 @@ export const POLICY: readonly ActionRule[] = [
     action: 'EventService:Cancel',
     guard: (ctx) => attr(ctx, 'status') !== 'CANCELLED',
     reason: 'This event is already cancelled.',
+  },
+  {
+    // A holder may always edit their own profile; editing somebody else's is an
+    // administrative act and needs the UserService:Update grant (FR-03). The
+    // backend enforces the same split in UserService.updateProfile.
+    action: 'UserService:Update',
+    allowSelf: true,
   },
   {
     action: 'UserService:Deactivate',

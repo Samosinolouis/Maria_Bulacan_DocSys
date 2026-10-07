@@ -91,6 +91,7 @@ export function useUserService() {
     'getCurrent',
     'getById',
     'list',
+    'create',
     'updateProfile',
     'deactivate',
     'reactivate',

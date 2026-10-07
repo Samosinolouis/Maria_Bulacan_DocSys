@@ -14,6 +14,9 @@ export const USER_OPS = {
   updateProfile: `mutation UpdateUserProfile($id: ID!, $input: UpdateUserProfileInput!) {
     updateUserProfile(id: $id, input: $input) { changedEntities user { ${USER_FIELDS} roles { ${ROLE_FIELDS} } effectivePermissions } }
   }`,
+  create: `mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) { changedEntities user { ${USER_FIELDS} roles { ${ROLE_FIELDS} } effectivePermissions } }
+  }`,
   deactivate: `mutation DeactivateUser($id: ID!) {
     deactivateUser(id: $id) { changedEntities user { ${USER_FIELDS} roles { ${ROLE_FIELDS} } effectivePermissions } }
   }`,

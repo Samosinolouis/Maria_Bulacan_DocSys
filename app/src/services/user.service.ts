@@ -17,6 +17,7 @@ import type {
 import type {
   AssignRoleInput,
   CreateRoleInput,
+  CreateUserInput,
   IRoleService,
   IUserService,
   RemoveRoleInput,
@@ -98,8 +99,25 @@ export class UserService implements IUserService {
     });
   }
 
+  /** Provision a new account in the identity provider. Action: UserService:Create. */
+  async create(input: CreateUserInput): Promise<User> {
+    authorizeOrThrow(this.authz, 'UserService:Create');
+    const payload = await this.gql.request<{ createUser: MutationAnswer<'user', User> }>({
+      document: USER_OPS.create,
+      variables: { input },
+      operationName: 'CreateUser',
+    });
+    invalidateChangedEntities(this.cache, payload.createUser.changedEntities);
+    return payload.createUser.user;
+  }
+
+  /**
+   * The engine allows the account holder to edit their own record without the
+   * grant (see the `UserService:Update` rule), so the resource id must be
+   * passed for the self-service case to pass the policy.
+   */
   async updateProfile(id: string, input: UpdateUserProfileInput): Promise<User> {
-    authorizeOrThrow(this.authz, 'UserService:Update');
+    authorizeOrThrow(this.authz, 'UserService:Update', { kind: 'user', attributes: { id } });
     const payload = await this.gql.request<{
       updateUserProfile: MutationAnswer<'user', User>;
     }>({

@@ -122,6 +122,25 @@ export type CreateRoleInput = {
   permissionPayload: Array<Scalars['String']['input']>;
 };
 
+export type CreateUserInput = {
+  contactNo: Scalars['String']['input'];
+  email: Scalars['String']['input'];
+  firstName: Scalars['String']['input'];
+  lastName: Scalars['String']['input'];
+  middleName?: InputMaybe<Scalars['String']['input']>;
+  office: Scalars['String']['input'];
+  position: Scalars['String']['input'];
+  /** Realm roles granted at provisioning time; each id must already exist. */
+  roleIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  suffix?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Optional one-time credential. Keycloak stores it as a temporary password, so
+   * the holder is forced to replace it at first sign-in; it is never persisted by
+   * this application (NFR-05).
+   */
+  temporaryPassword?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type CreateVenueInput = {
   /** Short uppercase code, unique. Not editable afterwards. */
   code: Scalars['String']['input'];
@@ -440,6 +459,11 @@ export type Mutation = {
   createFolder: FolderMutationPayload;
   createRequestType: RequestTypeMutationPayload;
   createRole: RoleMutationPayload;
+  /**
+   * Provision a new plantilla account in the identity provider and mirror it as a
+   * shadow user. Action: UserService:Create (FR-01, FR-02).
+   */
+  createUser: UserMutationPayload;
   createVenue: VenueMutationPayload;
   /** Soft deactivation - users are never deleted (FR-03). */
   deactivateUser: UserMutationPayload;
@@ -470,6 +494,10 @@ export type Mutation = {
   transmitDocument: DocumentMutationPayload;
   updateEvent: EventMutationPayload;
   updateRole: RoleMutationPayload;
+  /**
+   * Update a profile. The account holder may always edit their own record;
+   * editing somebody else's requires UserService:Update (FR-03).
+   */
   updateUserProfile: UserMutationPayload;
   updateVenue: VenueMutationPayload;
   upsertHoliday: HolidayMutationPayload;
@@ -514,6 +542,11 @@ export type MutationCreateRequestTypeArgs = {
 
 export type MutationCreateRoleArgs = {
   input: CreateRoleInput;
+};
+
+
+export type MutationCreateUserArgs = {
+  input: CreateUserInput;
 };
 
 

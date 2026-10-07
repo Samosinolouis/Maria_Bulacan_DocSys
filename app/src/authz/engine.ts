@@ -53,6 +53,13 @@ export class AuthorizationEngine implements IAuthorizationEngine {
       return { allowed: false, code: 'NO_SESSION', reason: 'Your session is still loading.' };
     }
 
+    const rule = POLICY_BY_ACTION.get(request.action);
+
+    // Self-service actions bypass the grant check for the actor's own record.
+    if (rule?.allowSelf && request.resource?.attributes?.id === this.subject.userId) {
+      return { allowed: true };
+    }
+
     if (!permissionSatisfies(this.subject.permissions, request.action)) {
       return {
         allowed: false,
@@ -61,7 +68,6 @@ export class AuthorizationEngine implements IAuthorizationEngine {
       };
     }
 
-    const rule = POLICY_BY_ACTION.get(request.action);
     if (!rule) return { allowed: true };
 
     const ctx = { subject: this.subject, resource: request.resource ?? null, action: request.action };
