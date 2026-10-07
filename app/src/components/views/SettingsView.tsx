@@ -19,11 +19,9 @@ import {
   Loader2,
   Pencil,
   Plus,
-  RefreshCw,
   RotateCcw,
-  ShieldCheck,
   SlidersHorizontal,
-  X,
+  Users,
 } from 'lucide-react';
 import { useToast } from '@/providers/ToastProvider';
 import {
@@ -39,108 +37,18 @@ import type {
   UpsertDocumentTypeInput,
   UpsertRequestTypeInput,
 } from '@/services/contracts';
+import {
+  INPUT,
+  LABEL,
+  Loading,
+  Restricted,
+  RowError,
+  Section,
+  StatusBadge,
+} from '@/components/settings/SettingsPrimitives';
+import UserManagementPanel from '@/components/settings/UserManagementPanel';
 
-const INPUT =
-  'w-full p-2 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#15803D]';
-const LABEL = 'block text-[11px] font-bold text-[#081E36] mb-1';
-
-type SettingsTab = 'document-types' | 'request-types' | 'venues' | 'holidays' | 'roles';
-
-/** Section shell: header, count and the maintenance body. */
-function Section({
-  icon,
-  title,
-  description,
-  count,
-  refreshing,
-  onRefresh,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  count: number | null;
-  refreshing?: boolean;
-  onRefresh?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded border border-[#CBD5E1] shadow-sm overflow-hidden">
-      <div className="p-4 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-cinzel text-sm font-bold text-[#081E36] flex items-center gap-2">
-            {icon}
-            {title}
-            {count !== null && (
-              <span className="font-mono text-[10px] font-bold text-[#334155] bg-white border border-[#CBD5E1] px-1.5 py-0.5 rounded">
-                {count}
-              </span>
-            )}
-          </h3>
-          <p className="text-[11px] text-[#64748B] mt-0.5">{description}</p>
-        </div>
-        {onRefresh && (
-          <button
-            onClick={onRefresh}
-            className="text-xs font-bold text-[#15803D] hover:underline cursor-pointer inline-flex items-center gap-1.5 shrink-0"
-          >
-            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
-            <span>Refresh</span>
-          </button>
-        )}
-      </div>
-      <div className="p-4 space-y-4">{children}</div>
-    </div>
-  );
-}
-
-function Restricted({ grant }: { grant: string }) {
-  return (
-    <p className="text-xs text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded p-3">
-      Maintaining this reference data requires the {grant} grant.
-    </p>
-  );
-}
-
-function StatusBadge({ isActive }: { isActive: boolean }) {
-  return (
-    <span
-      className={`inline-block px-2 py-0.5 rounded border font-mono text-[10px] font-bold ${
-        isActive
-          ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
-          : 'bg-[#F1F5F9] border-[#CBD5E1] text-[#334155]'
-      }`}
-    >
-      {isActive ? 'ACTIVE' : 'INACTIVE'}
-    </span>
-  );
-}
-
-function RowError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="p-3 bg-white border border-[#334155] rounded text-xs text-[#0F172A] font-semibold flex items-center justify-between gap-2">
-      <span className="flex items-start gap-2">
-        <X size={14} className="text-[#334155] shrink-0 mt-0.5" />
-        <span>{message}</span>
-      </span>
-      <button
-        onClick={onRetry}
-        className="btn-fluid px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#334155] rounded text-xs font-semibold cursor-pointer shrink-0"
-      >
-        Retry
-      </button>
-    </div>
-  );
-}
-
-function Loading({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs text-[#64748B]">
-      <Loader2 size={14} className="animate-spin text-[#94A3B8]" />
-      <span>{label}</span>
-    </div>
-  );
-}
+type SettingsTab = 'document-types' | 'request-types' | 'venues' | 'holidays' | 'users';
 
 interface ClassificationValues {
   code: string;
@@ -577,7 +485,7 @@ export default function SettingsView() {
   const canHolidays = useCan('ReportService:Read');
   const canVenues = useCan('VenueService:Read');
   const canManageVenues = useCan('VenueService:Manage');
-  const canRoles = useCan('RoleService:Read');
+  const canManageUsers = useCan('UserService:Read');
 
   const [tab, setTab] = useState<SettingsTab>('document-types');
 
@@ -709,9 +617,9 @@ export default function SettingsView() {
       count: holidaysQuery.isLoading ? null : holidays.length,
     },
     {
-      id: 'roles',
-      label: 'User Roles',
-      icon: <ShieldCheck size={14} />,
+      id: 'users',
+      label: 'User Management',
+      icon: <Users size={14} />,
       count: null,
     },
   ];
@@ -926,24 +834,20 @@ export default function SettingsView() {
         </Section>
       )}
 
-      {/* User roles */}
-      {tab === 'roles' && (
-        <Section
-          icon={<ShieldCheck size={15} className="text-[#15803D]" />}
-          title="USER ROLES"
-          description="Role definitions and the permission grants they carry."
-          count={null}
-        >
-          {!canRoles && <Restricted grant="RoleService:Read" />}
-          <div className="p-6 text-center text-xs text-[#64748B] border border-[#E2E8F0] rounded space-y-1">
-            <div className="font-bold text-sm text-[#081E36]">Not available yet</div>
-            <p>
-              Role maintenance is intentionally empty in this release. Definitions and grants are read
-              from the Statutory Audit Trail console until the role editor lands.
-            </p>
-          </div>
-        </Section>
-      )}
+      {/* User management - accounts, role grants and role definitions */}
+      {tab === 'users' &&
+        (canManageUsers ? (
+          <UserManagementPanel />
+        ) : (
+          <Section
+            icon={<Users size={15} className="text-[#15803D]" />}
+            title="USER MANAGEMENT"
+            description="Plantilla accounts, their role grants, and the soft deactivation that retires an account without deleting its audit history (FR-03)."
+            count={null}
+          >
+            <Restricted grant="UserService:Read" />
+          </Section>
+        ))}
 
       <div className="p-3 bg-[#F0FDF4] border border-[#86EFAC] rounded-lg text-[11px] text-[#166534] font-semibold flex items-center gap-2">
         <CheckCircle2 size={14} />
