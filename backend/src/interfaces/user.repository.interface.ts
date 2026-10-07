@@ -41,9 +41,10 @@ export interface IUserRepository {
   findByIds(ids: string[]): Promise<UserRecord[]>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findMany(options: ListOptions): Promise<UserRecord[]>;
+  count(options?: Pick<ListOptions, "where">): Promise<number>;
   create(data: CreateUserData): Promise<UserRecord>;
   /** Partial update; refreshes updated_at. */
   update(id: string, data: UpdateUserData): Promise<UserRecord>;
-  /** Soft deactivate — users are never deleted (FR-03). */
+  /** Soft deactivate - users are never deleted (FR-03). */
   deactivate(id: string): Promise<UserRecord>;
 }

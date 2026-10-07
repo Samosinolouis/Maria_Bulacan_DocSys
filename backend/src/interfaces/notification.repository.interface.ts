@@ -25,6 +25,7 @@ export interface CreateNotificationData {
 export interface INotificationRepository {
   findById(id: string): Promise<NotificationRecord | null>;
   findMany(options: ListOptions): Promise<NotificationRecord[]>;
+  count(options?: Pick<ListOptions, "where">): Promise<number>;
   /** Unread count for the notification bell (FR-48). */
   countUnread(userId: string): Promise<number>;
   create(data: CreateNotificationData): Promise<NotificationRecord>;

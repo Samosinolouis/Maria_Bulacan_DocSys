@@ -49,6 +49,10 @@ export interface IDocumentRepository {
   count(options?: Pick<ListOptions, "where">): Promise<number>;
   /** Group counts by document category for monthly/annual reports (FR-36). */
   countByType(where?: ListOptions["where"]): Promise<Array<{ documentTypeId: string; count: number }>>;
+  /** Direct document counts per folder id (for the folder itemCount). */
+  countByFolder(folderIds: string[]): Promise<Array<{ folderId: string; count: number }>>;
+  /** File every document of a request into a folder (close/archiving, FR-29..31). */
+  assignFolderByRequest(requestId: string, folderId: string): Promise<number>;
   create(data: CreateDocumentData): Promise<DocumentRecord>;
   update(id: string, data: UpdateDocumentData): Promise<DocumentRecord>;
 }
@@ -57,6 +61,13 @@ export interface IDocumentTypeRepository {
   findById(id: string): Promise<DocumentTypeRecord | null>;
   findByCode(code: string): Promise<DocumentTypeRecord | null>;
   findMany(options: ListOptions): Promise<DocumentTypeRecord[]>;
+  create(data: {
+    code: string;
+    name: string;
+    description: string;
+    prefix: string;
+    isActive?: boolean;
+  }): Promise<DocumentTypeRecord>;
 }
 
 export interface CreateTransmissionData {
@@ -91,7 +102,7 @@ export interface CreateDocumentLogData {
 }
 
 /**
- * APPEND-ONLY audit repository — [NFR-09] no update/delete methods exist by
+ * APPEND-ONLY audit repository - [NFR-09] no update/delete methods exist by
  * design. Writes MUST share the same transaction as the change they log (FR-39).
  */
 export interface IDocumentLogRepository {

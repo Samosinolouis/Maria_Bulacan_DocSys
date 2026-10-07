@@ -60,13 +60,22 @@ export interface IRequestTypeRepository {
   findById(id: string): Promise<RequestTypeRecord | null>;
   findByCode(code: string): Promise<RequestTypeRecord | null>;
   findMany(options: ListOptions): Promise<RequestTypeRecord[]>;
+  create(data: {
+    code: string;
+    name: string;
+    description: string;
+    prefix: string;
+    isActive?: boolean;
+  }): Promise<RequestTypeRecord>;
 }
 
 export interface IHolidayRepository {
   findById(id: string): Promise<HolidayRecord | null>;
-  /** All holidays within a date window — feeds business-day SLA math (FR-09). */
+  /** All holidays within a date window - feeds business-day SLA math (FR-09). */
   findBetween(from: Date, to: Date): Promise<HolidayRecord[]>;
   findMany(options: ListOptions): Promise<HolidayRecord[]>;
+  /** One row per date; re-encoding a date updates its name (NFR-23). */
+  upsert(data: { holidayDate: string; name: string }): Promise<HolidayRecord>;
 }
 
 /**

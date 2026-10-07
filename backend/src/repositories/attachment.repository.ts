@@ -1,5 +1,5 @@
 /**
- * [B] Document Module — Attachment Repository Implementations
+ * [B] Document Module - Attachment Repository Implementations
  *
  * Concrete data-access for request_attachments and document_attachments.
  * All writes are upload-only rows (checksum + storage_key pre-computed).

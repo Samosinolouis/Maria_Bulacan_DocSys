@@ -1,11 +1,11 @@
 /**
- * [C] Booking Module — Repository Implementations
+ * [C] Booking Module - Repository Implementations
  *
  * Concrete data-access for venues, events, event_attendees, activity_logs.
  * Conflict-detection queries exclude CANCELLED events (FR-42).
  */
 
-import { eq, inArray, and, ne, sql } from "drizzle-orm";
+import { eq, inArray, and, ne, sql, asc } from "drizzle-orm";
 
 import type { Database } from "../db/index.js";
 import { venues, events, eventAttendees, activityLogs } from "../db/schema/index.js";
@@ -17,7 +17,11 @@ import type {
   IActivityLogRepository,
   CreateEventData,
   UpdateEventData,
+  CreateVenueData,
+  UpdateVenueData,
+  VenueActiveBookingCount,
   OverlapWindow,
+  EventPartyFlag,
   CreateActivityLogData,
   VenueRecord,
   EventRecord,
@@ -58,6 +62,55 @@ export class VenueRepository implements IVenueRepository {
     if (options.offset) query = query.offset(options.offset);
     return query;
   }
+
+  async create(data: CreateVenueData): Promise<VenueRecord> {
+    const [row] = await this.tx
+      .insert(venues)
+      .values({
+        code: data.code,
+        name: data.name,
+        specialUse: data.specialUse ?? false,
+        isActive: data.isActive ?? true,
+      })
+      .returning();
+    return row;
+  }
+
+  async update(id: string, data: UpdateVenueData): Promise<VenueRecord> {
+    const [row] = await this.tx
+      .update(venues)
+      .set(data)
+      .where(eq(venues.id, id))
+      .returning();
+    if (!row) throw new NotFoundError("Venue", id);
+    return row;
+  }
+
+  async countActiveBookings(venueIds: string[]): Promise<VenueActiveBookingCount[]> {
+    if (venueIds.length === 0) return [];
+
+    return this.tx
+      .select({
+        venueId: events.venueId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(events)
+      .where(
+        and(
+          inArray(events.venueId, venueIds),
+          eq(events.status, "CONFIRMED"),
+          /**
+           * "Not ended yet". `events.end_time` is a `time` and Postgres cannot
+           * compare `time` with `timestamp`, so the date carries the day and the
+           * time only breaks the tie on today - served by
+           * `events_active_bookings_index`.
+           */
+          sql`(${events.eventDate} > current_date
+               OR (${events.eventDate} = current_date AND ${events.endTime} > current_time))`,
+        ),
+      )
+      .groupBy(events.venueId);
+  }
 }
 
 export class EventRepository implements IEventRepository {
@@ -82,6 +135,16 @@ export class EventRepository implements IEventRepository {
     return query;
   }
 
+  async count(options?: Pick<ListOptions, "where">): Promise<number> {
+    let query = this.tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(events)
+      .$dynamic();
+    if (options?.where) query = query.where(options.where);
+    const [row] = await query;
+    return row?.count ?? 0;
+  }
+
   async findInWindow(from: Date, to: Date): Promise<EventRecord[]> {
     return this.tx
       .select()
@@ -97,6 +160,18 @@ export class EventRepository implements IEventRepository {
 
   async findVenueConflicts(window: OverlapWindow): Promise<EventRecord[]> {
     const conditions = [eq(events.venueId, window.venueId), overlapsWindow(window), ne(events.status, "CANCELLED")];
+    if (window.excludeEventId) conditions.push(ne(events.id, window.excludeEventId));
+
+    return this.tx.select().from(events).where(and(...conditions));
+  }
+
+  async findFlagConflicts(
+    flag: EventPartyFlag,
+    window: OverlapWindow,
+  ): Promise<EventRecord[]> {
+    const flagColumn =
+      flag === "involvesMayor" ? events.involvesMayor : events.involvesAdministrator;
+    const conditions = [eq(flagColumn, true), overlapsWindow(window), ne(events.status, "CANCELLED")];
     if (window.excludeEventId) conditions.push(ne(events.id, window.excludeEventId));
 
     return this.tx.select().from(events).where(and(...conditions));
@@ -142,6 +217,14 @@ export class EventAttendeeRepository implements IEventAttendeeRepository {
       .select()
       .from(eventAttendees)
       .where(eq(eventAttendees.eventId, eventId));
+  }
+
+  async findByEvents(eventIds: string[]): Promise<EventAttendeeRecord[]> {
+    if (eventIds.length === 0) return [];
+    return this.tx
+      .select()
+      .from(eventAttendees)
+      .where(inArray(eventAttendees.eventId, eventIds));
   }
 
   async findConflictingAttendees(
@@ -195,7 +278,7 @@ export class EventAttendeeRepository implements IEventAttendeeRepository {
   }
 }
 
-/** APPEND-ONLY audit repository — no update/delete methods by design [NFR-09]. */
+/** APPEND-ONLY audit repository - no update/delete methods by design [NFR-09]. */
 export class ActivityLogRepository implements IActivityLogRepository {
   constructor(private readonly tx: Database) {}
 
@@ -203,7 +286,17 @@ export class ActivityLogRepository implements IActivityLogRepository {
     return this.tx
       .select()
       .from(activityLogs)
-      .where(eq(activityLogs.eventId, eventId));
+      .where(eq(activityLogs.eventId, eventId))
+      .orderBy(asc(activityLogs.createdAt));
+  }
+
+  async findByEvents(eventIds: string[]): Promise<ActivityLogRecord[]> {
+    if (eventIds.length === 0) return [];
+    return this.tx
+      .select()
+      .from(activityLogs)
+      .where(inArray(activityLogs.eventId, eventIds))
+      .orderBy(asc(activityLogs.createdAt));
   }
 
   async append(data: CreateActivityLogData): Promise<ActivityLogRecord> {

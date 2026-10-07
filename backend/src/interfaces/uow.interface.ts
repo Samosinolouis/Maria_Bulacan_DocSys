@@ -9,8 +9,8 @@
  *
  * [SOLID:DIP]  Abstractions over concrete implementations.
  * [SOLID:SRP]  Each interface has one responsibility.
- * NOTE: External systems (B2, Keycloak) are NOT transactional and never
- * participate in a UoW — they are side effects handled by services after commit.
+ * NOTE: External systems (MinIO, Keycloak) are NOT transactional and never
+ * participate in a UoW - they are side effects handled by services after commit.
  */
 
 import type { IUserRepository } from "./user.repository.interface.js";
@@ -28,6 +28,7 @@ import type {
   ITransmissionRepository,
   IDocumentLogRepository,
 } from "./document.repository.interface.js";
+import type { IFolderRepository } from "./folder.repository.interface.js";
 import type {
   IRequestAttachmentRepository,
   IDocumentAttachmentRepository,
@@ -57,6 +58,7 @@ export interface IRepositories {
   documentLogs: IDocumentLogRepository;
   requestAttachments: IRequestAttachmentRepository;
   documentAttachments: IDocumentAttachmentRepository;
+  folders: IFolderRepository;
 
   // [C] Booking module
   venues: IVenueRepository;
@@ -65,7 +67,7 @@ export interface IRepositories {
   activityLogs: IActivityLogRepository;
 }
 
-/** Unit of Work — a repository container bound to one transaction. */
+/** Unit of Work - a repository container bound to one transaction. */
 export type IUnitOfWork = IRepositories;
 
 /** Database abstraction providing transaction capability. */
@@ -76,6 +78,6 @@ export interface IDatabase {
    */
   transaction<T>(fn: (uow: IRepositories) => Promise<T>): Promise<T>;
 
-  /** Execute without a transaction (auto-commit) — simple reads. */
+  /** Execute without a transaction (auto-commit) - simple reads. */
   query<T>(fn: (uow: IRepositories) => Promise<T>): Promise<T>;
 }

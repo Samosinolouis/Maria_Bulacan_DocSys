@@ -1,5 +1,5 @@
 /**
- * [B] Document Module — Intake Repository Implementations
+ * [B] Document Module - Intake Repository Implementations
  *
  * Concrete data-access for request_types, control_number_sequences, holidays,
  * and requests.
@@ -134,6 +134,26 @@ export class RequestTypeRepository implements IRequestTypeRepository {
     if (options.offset) query = query.offset(options.offset);
     return query;
   }
+
+  async create(data: {
+    code: string;
+    name: string;
+    description: string;
+    prefix: string;
+    isActive?: boolean;
+  }): Promise<RequestTypeRecord> {
+    const [row] = await this.tx
+      .insert(requestTypes)
+      .values({
+        code: data.code,
+        name: data.name,
+        description: data.description,
+        prefix: data.prefix,
+        isActive: data.isActive ?? true,
+      })
+      .returning();
+    return row;
+  }
 }
 
 export class HolidayRepository implements IHolidayRepository {
@@ -161,6 +181,18 @@ export class HolidayRepository implements IHolidayRepository {
     if (options.offset) query = query.offset(options.offset);
     return query;
   }
+
+  async upsert(data: { holidayDate: string; name: string }): Promise<HolidayRecord> {
+    const [row] = await this.tx
+      .insert(holidays)
+      .values({ holidayDate: data.holidayDate, name: data.name })
+      .onConflictDoUpdate({
+        target: holidays.holidayDate,
+        set: { name: data.name },
+      })
+      .returning();
+    return row;
+  }
 }
 
 /**
@@ -172,10 +204,10 @@ export class ControlNumberRepository implements IControlNumberRepository {
 
   async issueNext(seqCode: string, year: number, prefix: string): Promise<string> {
     const result = (await this.tx.execute(sql`
-      INSERT INTO control_number_sequences (seq_code, year, last_value)
+      INSERT INTO app.control_number_sequences (seq_code, year, last_value)
       VALUES (${seqCode}, ${year}, 1)
       ON CONFLICT (seq_code, year)
-      DO UPDATE SET last_value = control_number_sequences.last_value + 1
+      DO UPDATE SET last_value = app.control_number_sequences.last_value + 1
       RETURNING last_value
     `)) as unknown as Array<{ last_value: number | string }>;
 

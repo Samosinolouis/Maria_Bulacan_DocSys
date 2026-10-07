@@ -33,6 +33,7 @@ export interface IRoleRepository {
   findById(id: string): Promise<RoleRecord | null>;
   findByName(name: string): Promise<RoleRecord | null>;
   findMany(options: ListOptions): Promise<RoleRecord[]>;
+  count(options?: Pick<ListOptions, "where">): Promise<number>;
   create(data: CreateRoleData): Promise<RoleRecord>;
   update(id: string, data: UpdateRoleData): Promise<RoleRecord>;
 
@@ -40,5 +41,7 @@ export interface IRoleRepository {
   assign(data: AssignRoleData): Promise<UserRoleRecord>;
   unassign(userId: string, roleId: string): Promise<UserRoleRecord | null>;
   findByUser(userId: string): Promise<UserRoleRecord[]>;
+  /** All assignments for a role (user-filter resolution, FR-06). */
+  findByRole(roleId: string): Promise<UserRoleRecord[]>;
   findRolesForUser(userId: string): Promise<RoleRecord[]>;
 }

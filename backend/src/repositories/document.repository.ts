@@ -1,5 +1,5 @@
 /**
- * [B] Document Module — Output Repository Implementations
+ * [B] Document Module - Output Repository Implementations
  *
  * Concrete data-access for document_types, documents, transmissions,
  * and document_logs (append-only).
@@ -90,6 +90,30 @@ export class DocumentRepository implements IDocumentRepository {
     return query.groupBy(documents.documentTypeId);
   }
 
+  async countByFolder(
+    folderIds: string[],
+  ): Promise<Array<{ folderId: string; count: number }>> {
+    if (folderIds.length === 0) return [];
+    const rows = await this.tx
+      .select({
+        folderId: documents.folderId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(documents)
+      .where(inArray(documents.folderId, folderIds))
+      .groupBy(documents.folderId);
+    return rows.map((row) => ({ folderId: row.folderId as string, count: row.count }));
+  }
+
+  async assignFolderByRequest(requestId: string, folderId: string): Promise<number> {
+    const rows = await this.tx
+      .update(documents)
+      .set({ folderId, updatedAt: new Date() })
+      .where(eq(documents.requestId, requestId))
+      .returning({ id: documents.id });
+    return rows.length;
+  }
+
   async create(data: CreateDocumentData): Promise<DocumentRecord> {
     const [row] = await this.tx
       .insert(documents)
@@ -145,6 +169,26 @@ export class DocumentTypeRepository implements IDocumentTypeRepository {
     query = query.limit(options.limit);
     if (options.offset) query = query.offset(options.offset);
     return query;
+  }
+
+  async create(data: {
+    code: string;
+    name: string;
+    description: string;
+    prefix: string;
+    isActive?: boolean;
+  }): Promise<DocumentTypeRecord> {
+    const [row] = await this.tx
+      .insert(documentTypes)
+      .values({
+        code: data.code,
+        name: data.name,
+        description: data.description,
+        prefix: data.prefix,
+        isActive: data.isActive ?? true,
+      })
+      .returning();
+    return row;
   }
 }
 

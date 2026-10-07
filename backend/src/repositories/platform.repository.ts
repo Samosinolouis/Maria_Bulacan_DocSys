@@ -1,11 +1,11 @@
 /**
- * [A] Shared Platform — Repository Implementations
+ * [A] Shared Platform - Repository Implementations
  *
  * Concrete data-access for users, roles, user_roles, notifications.
  * Each repository receives a DB executor (connection OR transaction) at
  * construction time, so the Unit of Work controls atomicity.
  *
- * [SOLID:SRP] Persistence only — no business rules.
+ * [SOLID:SRP] Persistence only - no business rules.
  * [SOLID:DIP] Implements the interfaces; callers depend on the abstractions.
  */
 
@@ -60,6 +60,16 @@ export class UserRepository implements IUserRepository {
     query = query.limit(options.limit);
     if (options.offset) query = query.offset(options.offset);
     return query;
+  }
+
+  async count(options?: Pick<ListOptions, "where">): Promise<number> {
+    let query = this.tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .$dynamic();
+    if (options?.where) query = query.where(options.where);
+    const [row] = await query;
+    return row?.count ?? 0;
   }
 
   async create(data: CreateUserData): Promise<UserRecord> {
@@ -117,6 +127,16 @@ export class RoleRepository implements IRoleRepository {
     return query;
   }
 
+  async count(options?: Pick<ListOptions, "where">): Promise<number> {
+    let query = this.tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(roles)
+      .$dynamic();
+    if (options?.where) query = query.where(options.where);
+    const [row] = await query;
+    return row?.count ?? 0;
+  }
+
   async create(data: CreateRoleData): Promise<RoleRecord> {
     const [row] = await this.tx
       .insert(roles)
@@ -163,6 +183,10 @@ export class RoleRepository implements IRoleRepository {
     return this.tx.select().from(userRoles).where(eq(userRoles.userId, userId));
   }
 
+  async findByRole(roleId: string): Promise<UserRoleRecord[]> {
+    return this.tx.select().from(userRoles).where(eq(userRoles.roleId, roleId));
+  }
+
   async findRolesForUser(userId: string): Promise<RoleRecord[]> {
     return this.tx
       .select({
@@ -197,6 +221,16 @@ export class NotificationRepository implements INotificationRepository {
     query = query.limit(options.limit);
     if (options.offset) query = query.offset(options.offset);
     return query;
+  }
+
+  async count(options?: Pick<ListOptions, "where">): Promise<number> {
+    let query = this.tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .$dynamic();
+    if (options?.where) query = query.where(options.where);
+    const [row] = await query;
+    return row?.count ?? 0;
   }
 
   async countUnread(userId: string): Promise<number> {
