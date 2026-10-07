@@ -1,21 +1,23 @@
 'use client';
 
 import Image from 'next/image';
-import { User } from '@/lib/types';
-import { CLEAN_USERS } from '@/lib/cleanData';
 import { UserCheck, Menu, X, LogOut } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
+import type { AppUser } from '@/providers/AppProvider';
 
 interface GovHeaderProps {
-  currentUser: User;
-  onUserChange: (user: User) => void;
+  currentUser: AppUser;
   mobileMenuOpen?: boolean;
   onToggleMobileMenu?: () => void;
   onLogout?: () => void;
 }
 
+/**
+ * Letterhead header. The identity is the authenticated Keycloak session (loaded
+ * through `me`); there is no persona switcher - roles come from the backend.
+ */
 export default function GovHeader({
   currentUser,
-  onUserChange,
   mobileMenuOpen,
   onToggleMobileMenu,
   onLogout,
@@ -23,7 +25,6 @@ export default function GovHeader({
   return (
     <header className="gov-header">
       <div className="w-full px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 lg:gap-4">
-        {/* Heraldic Letterhead Branding */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0">
@@ -67,7 +68,6 @@ export default function GovHeader({
             </div>
           </div>
 
-          {/* Mobile Navigation Drawer Toggle */}
           {onToggleMobileMenu && (
             <button
               type="button"
@@ -80,31 +80,20 @@ export default function GovHeader({
           )}
         </div>
 
-        {/* Operational Controls & Role Impersonation */}
         <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto justify-end pt-2 lg:pt-0 border-t border-[#E2E8F0] lg:border-t-0">
-          {/* Active Role Selector */}
+          <NotificationBell />
+
           <div className="flex-1 lg:flex-none flex items-center gap-2 bg-[#F1F5F9] border border-[#CBD5E1] rounded px-2.5 py-1.5 text-xs min-w-0">
             <UserCheck size={16} className="text-[#081E36] shrink-0" />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-[9px] uppercase font-bold text-[#64748B]">Active Account</span>
-              <select
-                value={currentUser.id}
-                onChange={(e) => {
-                  const selected = CLEAN_USERS.find((u) => u.id === e.target.value);
-                  if (selected) onUserChange(selected);
-                }}
-                className="bg-transparent font-bold text-[#081E36] cursor-pointer focus:outline-none text-xs truncate max-w-full"
-              >
-                {CLEAN_USERS.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.fullName} ({u.title})
-                  </option>
-                ))}
-              </select>
+              <span className="font-bold text-[#081E36] text-xs truncate">
+                {currentUser.fullName}
+                {currentUser.title ? ` (${currentUser.title})` : ''}
+              </span>
             </div>
           </div>
 
-          {/* Official Sign Out Button */}
           {onLogout && (
             <button
               onClick={onLogout}

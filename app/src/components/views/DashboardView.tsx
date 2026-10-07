@@ -1,97 +1,100 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
-  SlidersHorizontal,
-  RotateCcw,
   X,
   Paperclip,
-  ChevronDown,
-  ChevronUp,
-  Calendar,
-  Building,
-  CheckCircle2,
   AlertCircle,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import {
-  DOCUMENT_TYPE_LABELS,
-  DOCUMENT_CATEGORY_LABELS,
-  DOCUMENT_STATUS_META,
-  VENUE_LABELS,
-} from '@/lib/data';
+import { useApp } from '@/providers/AppProvider';
+import { useDashboardMetrics, useMySchedule, useRequests } from '@/hooks';
+import { REQUEST_STATUS_META, resolveStatusMeta, venueLabel } from '@/lib/constants';
+import type {
+  Connection,
+  DashboardMetrics,
+  Event,
+  EventStatus,
+  Request,
+} from '@/services/contracts/models';
 import HighlightMatch from '@/components/HighlightMatch';
 
+const EMPTY_METRICS: DashboardMetrics = {
+  totalDocuments: 0,
+  incomingRequests: 0,
+  pendingActions: 0,
+  closedTransactions: 0,
+  slaAtRisk: 0,
+  slaOverdue: 0,
+};
+
+const EVENT_STATUS_META: Record<EventStatus, { label: string; badgeCls: string }> = {
+  CONFIRMED: { label: 'Confirmed', badgeCls: 'text-[#166534] bg-[#DCFCE7] border border-[#86EFAC]' },
+  TENTATIVE: { label: 'Tentative', badgeCls: 'text-[#854D0E] bg-[#FEF9C3] border border-[#FDE68A]' },
+  CANCELLED: { label: 'Cancelled', badgeCls: 'text-[#475569] bg-[#F1F5F9] border border-[#CBD5E1]' },
+};
+
 export default function DashboardView() {
-  const {
-    documents,
-    events,
-    incomingCount,
-    reviewCount,
-    overdueDocs,
-    overdueCount,
-    approvedCount,
-    filteredDocuments,
-    searchQuery,
-    setSearchQuery,
-    filterType,
-    setFilterType,
-    filterCategory,
-    setFilterCategory,
-    filterStatus,
-    setFilterStatus,
-    filterPriority,
-    setFilterPriority,
-    filterSla,
-    setFilterSla,
-    filterOffice,
-    setFilterOffice,
-    dateFrom,
-    setDateFrom,
-    dateTo,
-    setDateTo,
-    hasAttachmentsFilter,
-    setHasAttachmentsFilter,
-    activeFilterCount,
-    resetAllFilters,
-    setSelectedDoc,
-    setNewEventOpen,
-  } = useApp();
+  const { setSelectedRequest, setNewEventOpen } = useApp();
 
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const metricsQuery = useDashboardMetrics();
+  const requestsQuery = useRequests({
+    first: 10,
+    sort: { field: 'RECEIVED_AT', direction: 'DESC' },
+  });
+  const scheduleQuery = useMySchedule();
 
-  // Collect distinct originating offices
-  const distinctOffices = useMemo(() => {
-    const standardOffices = [
-      'Office of the Municipal Mayor',
-      'Office of the Municipal Administrator',
-      'Municipal Planning and Development Office (MPDO)',
-      'Municipal Engineering Office',
-      'Municipal Budget Office',
-      'Municipal Accounting Office',
-      'Human Resource Management Office',
-      'Sangguniang Bayan',
-      'Municipal Legal Office',
-      'Municipal Social Welfare and Development Office (MSWDO)',
-      'Municipal Disaster Risk Reduction and Management Office (MDRRMO)',
-      'Barangay Poblacion',
-      'Philippine National Police (PNP Santa Maria)',
-    ];
-    const fromDocs = documents.map((d) => d.originOffice).filter(Boolean);
-    return Array.from(new Set([...standardOffices, ...fromDocs])).sort();
-  }, [documents]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Quick Preset Handlers
-  const handleQuickFilter = (type: 'ALL' | 'OVERDUE' | 'SCREENING' | 'REVIEW' | 'TRANSMIT' | 'CLOSED' | 'ATTACHMENTS') => {
-    resetAllFilters();
-    if (type === 'OVERDUE') setFilterSla('OVERDUE');
-    if (type === 'SCREENING') setFilterStatus('SCREENING');
-    if (type === 'REVIEW') setFilterStatus('REVIEW');
-    if (type === 'TRANSMIT') setFilterStatus('APPROVED');
-    if (type === 'CLOSED') setFilterStatus('CLOSED');
-    if (type === 'ATTACHMENTS') setHasAttachmentsFilter('WITH_ATTACHMENTS');
+  const metrics = (metricsQuery.data as DashboardMetrics | null) ?? EMPTY_METRICS;
+  const recentRequests = useMemo(
+    () =>
+      ((requestsQuery.data as Connection<Request> | null)?.edges.map((edge) => edge.node) ?? []),
+    [requestsQuery.data],
+  );
+  const events = scheduleQuery.data ?? [];
+
+  const isLoading = metricsQuery.isLoading || requestsQuery.isLoading || scheduleQuery.isLoading;
+  const error = metricsQuery.error ?? requestsQuery.error ?? scheduleQuery.error;
+
+  const refreshAll = () => {
+    metricsQuery.refresh();
+    requestsQuery.refresh();
+    scheduleQuery.refresh();
   };
+
+  // "Now" is captured asynchronously so the render stays pure (no Date.now in
+  // the render body); it drives the overdue highlight.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const id = setTimeout(() => setNow(Date.now()), 0);
+    return () => clearTimeout(id);
+  }, []);
+  const isOverdue = (request: Request) =>
+    now !== null && new Date(request.slaDeadline).getTime() < now;
+  const overdueRequest = recentRequests.find(isOverdue) ?? null;
+
+  const filteredRequests = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return recentRequests;
+    return recentRequests.filter((request) =>
+      [request.controlNo, request.title, request.requestingParty, request.originOffice, request.status]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q)),
+    );
+  }, [recentRequests, searchQuery]);
+
+  const venueName = (event: Event) => event.venue?.name ?? venueLabel(event.venue?.code ?? event.venueId);
+
+  if (isLoading) {
+    return <LoadingPanel label="Loading executive command center..." />;
+  }
+
+  if (error) {
+    return <ErrorPanel message={error.message} onRetry={refreshAll} />;
+  }
 
   return (
     <div className="space-y-6 animate-fluid-tab">
@@ -100,33 +103,33 @@ export default function DashboardView() {
         <div className="hud-cell">
           <span className="hud-section-label">SEC. I - REGISTRY INFLUX</span>
           <div className="hud-number-row">
-            <span className="hud-number">{documents.length}</span>
+            <span className="hud-number">{metrics.totalDocuments}</span>
             <span className="text-xs font-semibold text-[#86EFAC]">Total Logged</span>
           </div>
           <span className="hud-status-text font-mono text-[11px]">
-            {incomingCount} in screening queue
+            {metrics.incomingRequests} in screening queue
           </span>
         </div>
 
         <div className="hud-cell">
           <span className="hud-section-label">SEC. II - SIGNATURE DESK</span>
           <div className="hud-number-row">
-            <span className="hud-number text-[#FCD116]">{reviewCount}</span>
+            <span className="hud-number text-[#FCD116]">{metrics.pendingActions}</span>
             <span className="text-xs font-semibold text-[#CBD5E1]">For Review</span>
           </div>
           <span className="hud-status-text font-mono text-[11px]">
-            {approvedCount} cleared this week
+            {metrics.closedTransactions} cleared transactions
           </span>
         </div>
 
         <div className="hud-cell">
           <span className="hud-section-label">SEC. III - ARTA SLA INTEGRITY</span>
           <div className="hud-number-row">
-            <span className="hud-number text-[#FFFFFF]">{overdueCount}</span>
+            <span className="hud-number text-[#FFFFFF]">{metrics.slaOverdue}</span>
             <span className="text-xs font-semibold text-[#CBD5E1]">Escalated</span>
           </div>
           <span className="hud-status-text font-mono text-[11px]">
-            RA 11032 3-Day Mandate
+            {metrics.slaAtRisk} at risk | RA 11032 3-Day Mandate
           </span>
         </div>
 
@@ -137,13 +140,13 @@ export default function DashboardView() {
             <span className="text-xs font-semibold text-[#CBD5E1]">Gavel Events</span>
           </div>
           <span className="hud-status-text font-mono text-[11px]">
-            6 Municipal Venues active
+            Municipal venues synchronized
           </span>
         </div>
       </section>
 
       {/* Administrative Action Memorandum */}
-      {overdueDocs.length > 0 && (
+      {metrics.slaOverdue > 0 && (
         <section className="arta-memo-docket card-fluid">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
@@ -156,56 +159,67 @@ export default function DashboardView() {
                 </span>
               </div>
               <h3 className="font-serif-docket text-base font-bold text-[#0F172A]">
-                Memorandum of Overdue Transaction: {overdueDocs[0].title}
+                {overdueRequest
+                  ? `Memorandum of Overdue Transaction: ${overdueRequest.title}`
+                  : `Memorandum of Overdue Transactions: ${metrics.slaOverdue} dockets`}
               </h3>
               <p className="text-xs text-[#475569] mt-1 max-w-3xl leading-relaxed">
                 The 72-hour turnaround threshold mandated by the Ease of Doing Business Act has
-                expired for control docket <strong>[{overdueDocs[0].controlNumber}]</strong>.
-                Transmitted to the Office of the Municipal Administrator for immediate statutory resolution.
+                expired for{' '}
+                {overdueRequest ? (
+                  <>
+                    control docket <strong>[{overdueRequest.controlNo}]</strong>
+                  </>
+                ) : (
+                  <strong>{metrics.slaOverdue} registered dockets</strong>
+                )}
+                . Transmitted to the Office of the Municipal Administrator for immediate statutory
+                resolution.
               </p>
             </div>
 
-            <button
-              onClick={() => setSelectedDoc(overdueDocs[0])}
-              className="btn-fluid px-4 py-2 bg-[#081E36] hover:bg-[#0B2545] text-white rounded font-bold text-xs cursor-pointer shadow shrink-0"
-            >
-              Examine Docket
-            </button>
+            {overdueRequest && (
+              <button
+                onClick={() => setSelectedRequest(overdueRequest)}
+                className="btn-fluid px-4 py-2 bg-[#081E36] hover:bg-[#0B2545] text-white rounded font-bold text-xs cursor-pointer shadow shrink-0"
+              >
+                Examine Docket
+              </button>
+            )}
           </div>
         </section>
       )}
 
       {/* Asymmetric Civic Ledger Balance Sheet */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Category Balance Sheet */}
+        {/* Registry Balance Sheet */}
         <div className="bg-white p-5 rounded border border-[#CBD5E1] shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2">
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#081E36]">
-              Statutory Document Classification
+              Statutory Registry Balance
             </h3>
             <span className="font-mono text-[11px] text-[#64748B]">Active Ledger</span>
           </div>
 
           <div className="space-y-2 text-xs">
-            {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([catKey, label]) => {
-              const count = documents.filter((d) => d.category === catKey).length;
-              return (
-                <div
-                  key={catKey}
-                  onClick={() => {
-                    resetAllFilters();
-                    setFilterCategory(catKey);
-                  }}
-                  className="flex items-center justify-between p-2 hover:bg-[#F8FAFC] rounded border border-transparent hover:border-[#E2E8F0] cursor-pointer transition-colors"
-                  title={`Filter by ${label}`}
-                >
-                  <span className="font-medium text-[#334155]">{label}</span>
-                  <span className="font-mono font-bold text-[#081E36] bg-[#F1F5F9] px-2 py-0.5 rounded">
-                    {count}
-                  </span>
-                </div>
-              );
-            })}
+            {[
+              { label: 'Total Documents Logged', value: metrics.totalDocuments },
+              { label: 'Incoming Requests', value: metrics.incomingRequests },
+              { label: 'Pending Executive Actions', value: metrics.pendingActions },
+              { label: 'Closed Transactions', value: metrics.closedTransactions },
+              { label: 'SLA At Risk', value: metrics.slaAtRisk },
+              { label: 'SLA Overdue', value: metrics.slaOverdue },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between p-2 hover:bg-[#F8FAFC] rounded border border-transparent hover:border-[#E2E8F0] transition-colors"
+              >
+                <span className="font-medium text-[#334155]">{row.label}</span>
+                <span className="font-mono font-bold text-[#081E36] bg-[#F1F5F9] px-2 py-0.5 rounded">
+                  {row.value}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -230,59 +244,58 @@ export default function DashboardView() {
                 <p>Schedule executive proceedings or conference room bookings above.</p>
               </div>
             ) : (
-              events.map((evt) => (
-                <div
-                  key={evt.id}
-                  className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded flex items-center justify-between text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-[#081E36] text-white rounded">
-                        {VENUE_LABELS[evt.venue]?.label}
-                      </span>
-                      <span className="font-mono text-[11px] text-[#64748B]">
-                        {evt.date} | {evt.startTime} - {evt.endTime}
-                      </span>
-                      {evt.involvesMayor && (
-                        <span className="text-[10px] font-bold text-[#081E36] bg-[#E2E8F0] border border-[#CBD5E1] px-1.5 py-0.5 rounded">
-                          MAYOR PRESIDING
+              events.map((event) => {
+                const statusMeta = resolveStatusMeta(EVENT_STATUS_META, event.status);
+                return (
+                  <div
+                    key={event.id}
+                    className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded flex items-center justify-between text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-[#081E36] text-white rounded">
+                          {venueName(event)}
                         </span>
-                      )}
+                        <span className="font-mono text-[11px] text-[#64748B]">
+                          {event.eventDate} | {event.startTime} - {event.endTime}
+                        </span>
+                        {event.involvesMayor && (
+                          <span className="text-[10px] font-bold text-[#081E36] bg-[#E2E8F0] border border-[#CBD5E1] px-1.5 py-0.5 rounded">
+                            MAYOR PRESIDING
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-bold text-sm text-[#0F172A]">{event.title}</div>
+                      <div className="text-[#64748B] text-[11px]">
+                        Department: {event.department}
+                      </div>
                     </div>
-                    <div className="font-bold text-sm text-[#0F172A]">{evt.title}</div>
-                    <div className="text-[#64748B] text-[11px]">
-                      Organizer: {evt.organizer} ({evt.department})
-                    </div>
-                  </div>
 
-                  <span className="font-mono text-[10px] font-bold text-[#15803D] bg-[#DCFCE7] px-2 py-1 rounded border border-[#86EFAC]">
-                    CONFIRMED
-                  </span>
-                </div>
-              ))
+                    <span
+                      className={`font-mono text-[10px] font-bold px-2 py-1 rounded shrink-0 ${statusMeta.badgeCls}`}
+                    >
+                      {statusMeta.label.toUpperCase()}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* Main Municipal Docket Ledger Table with Comprehensive Search Engine */}
+      {/* Main Municipal Docket Ledger Table */}
       <div className="bg-white rounded border border-[#CBD5E1] shadow-sm overflow-hidden space-y-0">
-        {/* Search & Filter Command Toolbar */}
+        {/* Search Command Toolbar */}
         <div className="p-4 bg-[#F8FAFC] border-b border-[#E2E8F0] space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-cinzel text-sm font-bold text-[#081E36]">
-                  MUNICIPAL DOCKET LEDGER TABLE
-                </h3>
-                {activeFilterCount > 0 && (
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-[#081E36] text-white rounded">
-                    {activeFilterCount} Filter{activeFilterCount > 1 ? 's' : ''} Active
-                  </span>
-                )}
-              </div>
+              <h3 className="font-cinzel text-sm font-bold text-[#081E36]">
+                MUNICIPAL DOCKET LEDGER TABLE
+              </h3>
               <p className="text-[11px] text-[#64748B]">
-                Official chronological registry of incoming communications, executive orders, and municipal transactions.
+                Official chronological registry of incoming communications, executive orders, and
+                municipal transactions.
               </p>
             </div>
 
@@ -294,7 +307,7 @@ export default function DashboardView() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search docket, party, office, draft, annex..."
+                  placeholder="Search docket, party, office..."
                   className="w-full pl-8 pr-7 py-1.5 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#15803D] bg-white text-[#0F172A]"
                 />
                 {searchQuery && (
@@ -307,240 +320,22 @@ export default function DashboardView() {
                   </button>
                 )}
               </div>
-
-              {/* Advanced Filter Drawer Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                className={`btn-fluid flex items-center gap-1.5 px-3 py-1.5 border rounded text-xs font-semibold cursor-pointer transition-colors ${
-                  showAdvancedFilters || activeFilterCount > 0
-                    ? 'bg-[#081E36] text-white border-[#081E36]'
-                    : 'bg-white text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9]'
-                }`}
-                title="Toggle advanced multi-parameter filters"
-              >
-                <SlidersHorizontal size={13} />
-                <span>Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 bg-[#FCD116] text-[#081E36] rounded-full">
-                    {activeFilterCount}
-                  </span>
-                )}
-                {showAdvancedFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </button>
             </div>
           </div>
-
-          {/* Minimalist Filter Presets Bar */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs">
-            <button
-              onClick={() => handleQuickFilter('ALL')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                activeFilterCount === 0 && !searchQuery
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              All ({documents.length})
-            </button>
-            <button
-              onClick={() => handleQuickFilter('OVERDUE')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                filterSla === 'OVERDUE'
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              Overdue ({overdueCount})
-            </button>
-            <button
-              onClick={() => handleQuickFilter('SCREENING')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                filterStatus === 'SCREENING'
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              Screening ({incomingCount})
-            </button>
-            <button
-              onClick={() => handleQuickFilter('REVIEW')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                filterStatus === 'REVIEW'
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              Review ({reviewCount})
-            </button>
-            <button
-              onClick={() => handleQuickFilter('TRANSMIT')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                filterStatus === 'APPROVED'
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              Transmit ({approvedCount})
-            </button>
-            <button
-              onClick={() => handleQuickFilter('ATTACHMENTS')}
-              className={`px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
-                hasAttachmentsFilter === 'WITH_ATTACHMENTS'
-                  ? 'bg-[#081E36] text-white font-semibold shadow-xs'
-                  : 'text-[#475569] hover:text-[#081E36] hover:bg-[#E2E8F0]/60'
-              }`}
-            >
-              With Annexes
-            </button>
-          </div>
-
-          {/* Collapsible Advanced Filters Drawer */}
-          {showAdvancedFilters && (
-            <div className="p-3.5 bg-white border border-[#CBD5E1] rounded mt-2 space-y-3 animate-fluid-fade">
-              <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
-                <span className="font-bold text-xs text-[#081E36] uppercase tracking-wider">
-                  Parametric Registry Filter Options
-                </span>
-                <span className="text-[11px] text-[#64748B]">
-                  Filter across date ranges, departments, statutory SLA status, and classifications
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
-                {/* 1. Origin Office Filter */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Originating Office / Dept</label>
-                  <select
-                    value={filterOffice}
-                    onChange={(e) => setFilterOffice(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  >
-                    <option value="ALL">All Municipal Offices</option>
-                    {distinctOffices.map((off, idx) => (
-                      <option key={idx} value={off}>
-                        {off}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 2. Document Classification / Type */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Document Classification</label>
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  >
-                    <option value="ALL">All Document Classifications</option>
-                    {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, meta]) => (
-                      <option key={k} value={k}>
-                        {meta.label} ({meta.prefix})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 3. Statutory SLA Status */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Statutory SLA Compliance</label>
-                  <select
-                    value={filterSla}
-                    onChange={(e) => setFilterSla(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  >
-                    <option value="ALL">All SLA Statuses</option>
-                    <option value="OVERDUE">Overdue (Expired 72hr Mandate)</option>
-                    <option value="DUE_TODAY">Due Today (Within 24 Hours)</option>
-                    <option value="WITHIN_SLA">Within Normal SLA Threshold</option>
-                  </select>
-                </div>
-
-                {/* 4. Priority Level */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Document Priority</label>
-                  <select
-                    value={filterPriority}
-                    onChange={(e) => setFilterPriority(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  >
-                    <option value="ALL">All Priority Levels</option>
-                    <option value="URGENT">Urgent Priority</option>
-                    <option value="HIGH">High Priority</option>
-                    <option value="NORMAL">Normal Priority</option>
-                  </select>
-                </div>
-
-                {/* 5. Date Received From */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Date Received (From)</label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  />
-                </div>
-
-                {/* 6. Date Received To */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Date Received (To)</label>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  />
-                </div>
-
-                {/* 7. Attachment & Scanning Presence */}
-                <div className="space-y-1">
-                  <label className="font-bold text-[#334155] block">Annexes & Digitized Scans</label>
-                  <select
-                    value={hasAttachmentsFilter}
-                    onChange={(e) => setHasAttachmentsFilter(e.target.value)}
-                    className="w-full p-1.5 border border-[#CBD5E1] rounded bg-white text-[#0F172A] focus:outline-none focus:border-[#15803D]"
-                  >
-                    <option value="ALL">All (With or Without Annexes)</option>
-                    <option value="WITH_ATTACHMENTS">Has Uploaded Annex Files</option>
-                    <option value="WITH_SCANS">Has Digitized Camera/Feeder Scans</option>
-                    <option value="WITHOUT_ATTACHMENTS">No Annexes Attached</option>
-                  </select>
-                </div>
-
-                {/* 8. Reset Action */}
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={resetAllFilters}
-                    className="w-full p-1.5 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#081E36] font-bold rounded cursor-pointer transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <RotateCcw size={13} />
-                    <span>Clear All Filters</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Search Results Summary Header */}
         <div className="px-4 py-2 bg-white border-b border-[#E2E8F0] flex items-center justify-between text-xs text-[#64748B]">
           <div>
-            Showing <strong>{filteredDocuments.length}</strong> of <strong>{documents.length}</strong> registered dockets
+            Showing <strong>{filteredRequests.length}</strong> of{' '}
+            <strong>{recentRequests.length}</strong> recent registered dockets
             {searchQuery && (
-              <span> matching &quot;<strong>{searchQuery}</strong>&quot;</span>
+              <span>
+                {' '}
+                matching &quot;<strong>{searchQuery}</strong>&quot;
+              </span>
             )}
           </div>
-          {activeFilterCount > 0 && (
-            <button
-              onClick={resetAllFilters}
-              className="text-[#15803D] hover:underline font-bold cursor-pointer"
-            >
-              Clear filters ({activeFilterCount})
-            </button>
-          )}
         </div>
 
         {/* Ledger Table */}
@@ -558,79 +353,90 @@ export default function DashboardView() {
               </tr>
             </thead>
             <tbody>
-              {filteredDocuments.length === 0 ? (
+              {filteredRequests.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-10 text-[#64748B] text-xs">
                     <div className="space-y-1.5 max-w-sm mx-auto">
                       <div className="font-bold text-sm text-[#081E36]">No Matching Dockets Found</div>
                       <p className="text-[11px] leading-relaxed">
-                        No municipal records match the active search terms and parametric filters.
-                        Try clearing or relaxing your filter parameters.
+                        No recent municipal records match the active search terms. Try clearing the
+                        search query.
                       </p>
-                      {activeFilterCount > 0 && (
+                      {searchQuery && (
                         <button
-                          onClick={resetAllFilters}
+                          onClick={() => setSearchQuery('')}
                           className="mt-2 btn-fluid px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-bold cursor-pointer"
                         >
-                          Clear All Filters
+                          Clear Search
                         </button>
                       )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredDocuments.map((doc) => {
-                  const statusMeta = DOCUMENT_STATUS_META[doc.status];
+                filteredRequests.map((request) => {
+                  const statusMeta = resolveStatusMeta(REQUEST_STATUS_META, request.status);
+                  const overdue = isOverdue(request);
                   return (
-                    <tr key={doc.id}>
+                    <tr
+                      key={request.id}
+                      onClick={() => setSelectedRequest(request)}
+                      className="cursor-pointer"
+                    >
                       <td>
                         <span className="docket-control-badge font-mono">
-                          <HighlightMatch text={doc.controlNumber} query={searchQuery} />
+                          <HighlightMatch text={request.controlNo} query={searchQuery} />
                         </span>
                       </td>
                       <td>
                         <span className="font-semibold text-xs text-[#334155]">
-                          {DOCUMENT_TYPE_LABELS[doc.type]?.label || doc.type}
+                          {request.requestType?.name ?? request.requestTypeId}
                         </span>
                       </td>
                       <td>
                         <div className="docket-title-cell max-w-md">
                           <div className="font-bold text-[#0F172A]">
-                            <HighlightMatch text={doc.title} query={searchQuery} />
+                            <HighlightMatch text={request.title} query={searchQuery} />
                           </div>
-                          {doc.attachments && doc.attachments.length > 0 && (
+                          {request.attachments && request.attachments.length > 0 && (
                             <div className="text-[10px] text-[#15803D] flex items-center gap-1 mt-0.5">
                               <Paperclip size={10} />
-                              <span>{doc.attachments.length} attached annex{doc.attachments.length > 1 ? 'es' : ''}</span>
+                              <span>
+                                {request.attachments.length} attached annex
+                                {request.attachments.length > 1 ? 'es' : ''}
+                              </span>
                             </div>
                           )}
                         </div>
                       </td>
                       <td>
                         <div className="font-semibold text-xs text-[#0F172A]">
-                          <HighlightMatch text={doc.requestingParty} query={searchQuery} />
+                          <HighlightMatch text={request.requestingParty} query={searchQuery} />
                         </div>
                         <div className="text-[10px] text-[#64748B]">
-                          <HighlightMatch text={doc.originOffice} query={searchQuery} />
+                          <HighlightMatch text={request.originOffice} query={searchQuery} />
                         </div>
                       </td>
                       <td>
                         <span className={`status-badge ${statusMeta?.badgeCls || 'badge-received'}`}>
-                          {statusMeta?.label || doc.status}
+                          {statusMeta?.label || request.status}
                         </span>
                       </td>
                       <td>
                         <span
                           className={`font-mono text-xs font-bold ${
-                            doc.isOverdue ? 'text-[#081E36]' : 'text-[#15803D]'
+                            overdue ? 'text-[#081E36]' : 'text-[#15803D]'
                           }`}
                         >
-                          {doc.isOverdue ? 'OVERDUE' : '3 Days Valid'}
+                          {overdue ? 'OVERDUE' : '3 Days Valid'}
                         </span>
                       </td>
                       <td>
                         <button
-                          onClick={() => setSelectedDoc(doc)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRequest(request);
+                          }}
                           className="btn-fluid px-3 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer shadow-xs transition-colors"
                           title="Examine complete docket dossier"
                         >
@@ -644,6 +450,38 @@ export default function DashboardView() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingPanel({ label }: { label: string }) {
+  return (
+    <div className="space-y-6 animate-fluid-tab">
+      <div className="bg-white p-10 rounded border border-[#CBD5E1] shadow-sm flex flex-col items-center justify-center gap-3">
+        <Loader2 size={28} className="animate-spin text-[#081E36]" />
+        <span className="text-xs font-bold text-[#081E36]">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="space-y-6 animate-fluid-tab">
+      <div className="bg-white p-6 rounded border border-[#CBD5E1] shadow-sm space-y-3">
+        <div className="flex items-center gap-2 text-[#081E36]">
+          <AlertCircle size={18} />
+          <span className="font-bold text-sm">Unable to Load Municipal Registry</span>
+        </div>
+        <p className="text-xs text-[#475569] leading-relaxed">{message}</p>
+        <button
+          onClick={onRetry}
+          className="btn-fluid px-3.5 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
+        >
+          <RefreshCw size={13} />
+          <span>Retry</span>
+        </button>
       </div>
     </div>
   );

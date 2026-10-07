@@ -1,11 +1,75 @@
 'use client';
 
 import React from 'react';
-import { useApp } from '@/context/AppContext';
-import { DOCUMENT_CATEGORY_LABELS } from '@/lib/data';
+import { Loader2, X, RotateCcw } from 'lucide-react';
+import { useCategorySummary, useDashboardMetrics } from '@/hooks';
+
+/** Shared loading panel for the compliance ledger. */
+function LoadingPanel({ label }: { label: string }) {
+  return (
+    <div className="bg-white p-8 rounded border border-[#CBD5E1] shadow-sm flex items-center justify-center gap-2 text-xs text-[#64748B]">
+      <Loader2 size={16} className="animate-spin text-[#94A3B8]" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+/** Shared error panel with a retry affordance. */
+function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="p-3 bg-white border border-[#334155] rounded text-xs text-[#0F172A] font-semibold flex items-center justify-between gap-2">
+      <span className="flex items-start gap-2">
+        <X size={14} className="text-[#334155] shrink-0 mt-0.5" />
+        <span>{message}</span>
+      </span>
+      <button
+        onClick={onRetry}
+        className="btn-fluid px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#334155] rounded text-xs font-semibold cursor-pointer inline-flex items-center gap-1 shrink-0"
+      >
+        <RotateCcw size={12} />
+        <span>Retry</span>
+      </button>
+    </div>
+  );
+}
+
+/** One ARTA metric card. */
+function MetricCard({
+  label,
+  value,
+  hint,
+  valueClass,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  valueClass: string;
+}) {
+  return (
+    <div className="p-5 bg-white rounded border border-[#CBD5E1] shadow-sm card-fluid">
+      <span className="text-[10px] uppercase font-bold text-[#64748B] block">{label}</span>
+      <div className={`text-3xl font-extrabold font-mono my-1 ${valueClass}`}>{value}</div>
+      <p className="text-[11px] text-[#64748B]">{hint}</p>
+    </div>
+  );
+}
 
 export default function ReportsView() {
-  const { documents, overdueCount } = useApp();
+  const year = new Date().getFullYear();
+
+  const metricsQuery = useDashboardMetrics();
+  const summaryQuery = useCategorySummary({ period: 'ANNUAL', year });
+
+  const isLoading = metricsQuery.isLoading || summaryQuery.isLoading;
+  const error = metricsQuery.error ?? summaryQuery.error;
+
+  const metrics = metricsQuery.data;
+  const categoryRows = summaryQuery.data ?? [];
+
+  const refreshAll = () => {
+    metricsQuery.refresh();
+    summaryQuery.refresh();
+  };
 
   return (
     <div className="space-y-4 animate-fluid-tab">
@@ -14,93 +78,98 @@ export default function ReportsView() {
           REPUBLIC ACT 11032 STATUTORY COMPLIANCE LEDGER
         </h3>
         <p className="text-xs text-[#64748B]">
-          Official Anti-Red Tape Authority (ARTA) metrics, 72-hour turnaround enforcement, and monthly summary balance.
+          Official Anti-Red Tape Authority (ARTA) metrics, 72-hour turnaround enforcement, and annual summary
+          balance.
         </p>
       </div>
 
-      {/* 3 Pillar Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 bg-white rounded border border-[#CBD5E1] shadow-sm card-fluid">
-          <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-            Statutory SLA Success Rate
-          </span>
-          <div className="text-3xl font-extrabold font-mono text-[#15803D] my-1">
-            94.8%
-          </div>
-          <p className="text-[11px] text-[#64748B]">
-            Requests resolved within 72-hour ARTA processing limit.
-          </p>
-        </div>
+      {isLoading && <LoadingPanel label="Loading ARTA compliance metrics..." />}
 
-        <div className="p-5 bg-white rounded border border-[#CBD5E1] shadow-sm card-fluid">
-          <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-            Average Processing Turnaround
-          </span>
-          <div className="text-3xl font-extrabold font-mono text-[#081E36] my-1">
-            1.4 Days
-          </div>
-          <p className="text-[11px] text-[#64748B]">
-            Average time from Reception screening to Executive approval.
-          </p>
-        </div>
+      {error && <ErrorPanel message={error.message} onRetry={refreshAll} />}
 
-        <div className="p-5 bg-white rounded border border-[#CBD5E1] shadow-sm card-fluid">
-          <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-            Statutory Escalations Logged
-          </span>
-          <div className="text-3xl font-extrabold font-mono text-[#081E36] my-1">
-            {overdueCount}
+      {!isLoading && !error && (
+        <>
+          {/* Metric pillars */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <MetricCard
+              label="Total Documents Processed"
+              value={metrics?.totalDocuments ?? 0}
+              hint="Output documents drafted, reviewed, signed, or transmitted."
+              valueClass="text-[#081E36]"
+            />
+            <MetricCard
+              label="Incoming Requests Received"
+              value={metrics?.incomingRequests ?? 0}
+              hint="Communications and requests logged at the reception desk."
+              valueClass="text-[#081E36]"
+            />
+            <MetricCard
+              label="Pending Actions"
+              value={metrics?.pendingActions ?? 0}
+              hint="Transactions awaiting screening, drafting, review, or dispatch."
+              valueClass="text-[#081E36]"
+            />
+            <MetricCard
+              label="Closed Transactions"
+              value={metrics?.closedTransactions ?? 0}
+              hint="Requests concluded and filed into the municipal archive."
+              valueClass="text-[#15803D]"
+            />
+            <MetricCard
+              label="SLA At Risk"
+              value={metrics?.slaAtRisk ?? 0}
+              hint="Requests approaching the 72-hour ARTA processing limit."
+              valueClass="text-[#081E36]"
+            />
+            <MetricCard
+              label="SLA Overdue"
+              value={metrics?.slaOverdue ?? 0}
+              hint="Overdue transactions escalated to the Municipal Administrator."
+              valueClass="text-[#081E36]"
+            />
           </div>
-          <p className="text-[11px] text-[#64748B]">
-            Overdue transactions escalated directly to Municipal Administrator.
-          </p>
-        </div>
-      </div>
 
-      {/* Category Breakdown Table */}
-      <div className="bg-white rounded border border-[#CBD5E1] p-4 shadow-sm">
-        <h4 className="font-bold text-xs uppercase tracking-wider text-[#081E36] mb-3">
-          Monthly Document Processing Summary by Category
-        </h4>
-        <div className="overflow-x-auto">
-          <table className="municipal-docket-table">
-            <thead>
-              <tr>
-                <th>Statutory Category</th>
-                <th>Received</th>
-                <th>Approved</th>
-                <th>Denied</th>
-                <th>Archived</th>
-                <th>Compliance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([catKey, label]) => {
-                const total = documents.filter((d) => d.category === catKey).length;
-                const app = documents.filter(
-                  (d) => d.category === catKey && (d.status === 'APPROVED' || d.status === 'ENDORSED')
-                ).length;
-                const den = documents.filter((d) => d.category === catKey && d.status === 'DENIED').length;
-                const cl = documents.filter((d) => d.category === catKey && d.status === 'CLOSED').length;
-                return (
-                  <tr key={catKey}>
-                    <td className="font-bold text-[#081E36]">{label}</td>
-                    <td className="font-mono">{total}</td>
-                    <td className="font-mono text-[#15803D]">{app}</td>
-                    <td className="font-mono text-[#475569]">{den}</td>
-                    <td className="font-mono text-[#475569]">{cl}</td>
-                    <td>
-                      <span className="font-mono text-xs font-bold text-[#15803D]">
-                        100% Compliant
-                      </span>
-                    </td>
+          {/* Category Breakdown Table */}
+          <div className="bg-white rounded border border-[#CBD5E1] p-4 shadow-sm">
+            <h4 className="font-bold text-xs uppercase tracking-wider text-[#081E36] mb-3">
+              Annual Document Processing Summary by Category ({year})
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="municipal-docket-table">
+                <thead>
+                  <tr>
+                    <th>Statutory Category</th>
+                    <th>Code</th>
+                    <th>Documents</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {categoryRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="text-center py-8 text-[#64748B] text-xs">
+                        <div className="space-y-1">
+                          <div className="font-bold text-[#081E36]">No Category Activity Recorded</div>
+                          <p className="text-[11px]">
+                            Per-category counts for {year} will appear once documents are processed.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    categoryRows.map((row) => (
+                      <tr key={row.documentTypeId}>
+                        <td className="font-bold text-[#081E36]">{row.name}</td>
+                        <td className="font-mono text-[#334155]">{row.code}</td>
+                        <td className="font-mono text-[#15803D]">{row.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

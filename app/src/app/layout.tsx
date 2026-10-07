@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { AppProvider } from '@/context/AppContext';
+import { AuthProvider } from '@/providers/AuthProvider';
+import SessionGate from '@/components/SessionGate';
 import AppLayout from '@/components/AppLayout';
 
 export const metadata: Metadata = {
@@ -36,9 +37,12 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-[#F8FAFC] text-[#0F172A] selection:bg-[#FCD116] selection:text-[#081E36]">
-        <AppProvider>
-          <AppLayout>{children}</AppLayout>
-        </AppProvider>
+        {/* Auth provider: NextAuth (Keycloak) -> services -> authorization -> app state. */}
+        <AuthProvider>
+          <SessionGate>
+            <AppLayout>{children}</AppLayout>
+          </SessionGate>
+        </AuthProvider>
       </body>
     </html>
   );

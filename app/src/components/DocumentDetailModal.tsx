@@ -1,275 +1,311 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
 import {
   X,
-  CheckCircle2,
   Printer,
-  Calendar,
-  AlertTriangle,
-  Building,
-  UserCheck,
   Send,
   Check,
   Ban,
   FileText,
-  Eye,
   Download,
-  Upload,
-  Camera,
-  Maximize2,
-  FileCheck,
-  Plus,
-  Trash2,
   Paperclip,
-  Link as LinkIcon,
+  Loader2,
+  PenLine,
+  Archive,
+  Eye,
+  Upload,
+  FolderOpen,
 } from 'lucide-react';
-import { DocumentRecord, User, AuditEntry, DocumentStatus, Attachment } from '@/lib/types';
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_STATUS_META } from '@/lib/data';
-import { useApp } from '@/context/AppContext';
-import DocumentScanner from '@/components/DocumentScanner';
-import OfficialWordDocument from '@/components/OfficialWordDocument';
-
-function formatBytes(bytes: number, decimals = 1): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
+import { useApp } from '@/providers/AppProvider';
+import { useToast } from '@/providers/ToastProvider';
+import {
+  useAsyncAction,
+  useAttachmentService,
+  useCan,
+  useFolderService,
+  useRequest,
+} from '@/hooks';
+import {
+  REQUEST_STATUS_META,
+  REQUEST_CHANNEL_LABELS,
+  REQUEST_PRIORITY_LABELS,
+  DOCUMENT_STATUS_META,
+  DOCUMENT_LOG_ACTION_LABELS,
+  resolveStatusMeta,
+} from '@/lib/constants';
+import { renderTemplate } from '@/lib/template';
+import type {
+  Document,
+  Request,
+  ReviewDecision,
+  TransmissionMethod,
+} from '@/services/contracts/models';
+import type { Folder } from '@/services/contracts/report';
 
 interface DocumentDetailModalProps {
-  document: DocumentRecord;
-  currentUser: User;
-  auditLogs: AuditEntry[];
+  request: Request;
   onClose: () => void;
-  onUpdateStatus: (docId: string, newStatus: DocumentStatus, note?: string) => void;
-  onPrintRoutingSlip: (doc: DocumentRecord) => void;
 }
 
-export default function DocumentDetailModal({
-  document: doc,
-  currentUser,
-  auditLogs,
-  onClose,
-  onUpdateStatus,
-  onPrintRoutingSlip,
-}: DocumentDetailModalProps) {
-  const router = useRouter();
+/**
+ * Workflow progress steps. Step 6 is the filing act (close & archive); step 7 is
+ * the concluded state a request reaches once it is filed, so a closed dossier
+ * reads as Closed rather than still Archiving.
+ */
+const WORKFLOW_STEPS = [
+  { num: 1, label: '1. Reception' },
+  { num: 2, label: '2. Screening' },
+  { num: 3, label: '3. Preparation' },
+  { num: 4, label: '4. Review / Approval' },
+  { num: 5, label: '5. Transmission' },
+  { num: 6, label: '6. Archiving' },
+  { num: 7, label: '7. Closed' },
+] as const;
+
+/**
+ * Request stages at or past the transmission desk. The Step 4 decision actions
+ * (return, endorse, approve, sign) belong to the review desk only, so they must
+ * not be offered on a transmitted or closed dossier.
+ */
+const PAST_REVIEW_STATUSES: ReadonlySet<string> = new Set(['TRANSMITTED', 'CLOSED']);
+
+/** Full request dossier with its linked documents, annexes and audit trail. */
+export default function DocumentDetailModal({ request, onClose }: DocumentDetailModalProps) {
   const {
-    handleAttachDocument,
-    handleUpdateDocument,
-    setWordPreviewDoc,
-    setPrepareTargetDocId,
-    documents,
+    currentUser,
+    reviewDocument,
+    signDocument,
+    transmitDocument,
+    closeRequest,
+    refreshCounts,
+    setRoutingSlipRequest,
+    setWordPreviewRequest,
+    lastError,
   } = useApp();
+  const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState<'details' | 'scans' | 'preview' | 'audit'>('details');
-  const [activeScanPageIndex, setActiveScanPageIndex] = useState(0);
-  const [viewingAttachment, setViewingAttachment] = useState<Attachment | null>(null);
+  // The modal fetches its own fresh detail so mutations can refresh in place.
+  const { data: detail, refresh } = useRequest(request.id);
+  const dossier = detail ?? request;
+  const documents = dossier.documents ?? [];
+  const attachments = dossier.attachments ?? [];
+  const logs = dossier.logs ?? [];
 
-  // Attachment Drawer & Scanner Sub-modal State
-  const [attachModalOpen, setAttachModalOpen] = useState(false);
-  const [attachMode, setAttachMode] = useState<'upload' | 'scanner' | 'link'>('upload');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadFileName, setUploadFileName] = useState('');
-  const [uploadFileLabel, setUploadFileLabel] = useState('');
-  const [uploadFileDataUrl, setUploadFileDataUrl] = useState<string | null>(null);
-  const [uploadFileSize, setUploadFileSize] = useState('');
-  const [uploadFileType, setUploadFileType] = useState('');
-  const [linkDocId, setLinkDocId] = useState('');
-  const [attachSuccessMsg, setAttachSuccessMsg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'dossier' | 'attachments' | 'audit'>('dossier');
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(documents[0]?.id ?? null);
+  const [busy, setBusy] = useState(false);
 
-  // Modals
-  const [denialModalOpen, setDenialModalOpen] = useState(false);
-  const [denialReasonText, setDenialReasonText] = useState('');
-  const [transmitModalOpen, setTransmitModalOpen] = useState(false);
-  const [transmitRecipient, setTransmitRecipient] = useState('');
-  const [transmitOffice, setTransmitOffice] = useState('');
-  const [transmitProofUrl, setTransmitProofUrl] = useState<string | null>(null);
+  const [denialOpen, setDenialOpen] = useState(false);
+  const [denialReason, setDenialReason] = useState('');
 
-  const typeMeta = DOCUMENT_TYPE_LABELS[doc.type] || { label: doc.type, color: '#15803D' };
-  const statusMeta = DOCUMENT_STATUS_META[doc.status] || {
-    label: doc.status,
-    stepNumber: 1,
-    badgeCls: 'badge-received',
-    description: '',
-  };
-  const role = currentUser.role;
+  const [transmitOpen, setTransmitOpen] = useState(false);
+  const [recipientName, setRecipientName] = useState('');
+  const [receivingOffice, setReceivingOffice] = useState('');
+  const [receivedBy, setReceivedBy] = useState('');
+  const [method, setMethod] = useState<TransmissionMethod>('PICKUP');
 
-  const docAuditLogs = auditLogs.filter((log) => log.documentId === doc.id);
+  const {
+    getRequestAttachmentDownload,
+    getDocumentAttachmentDownload,
+    uploadDocumentAttachment,
+  } = useAttachmentService();
+  const { list: listFolders } = useFolderService();
+  const loadFoldersAction = useAsyncAction(listFolders);
+  const uploadFinalAction = useAsyncAction(uploadDocumentAttachment);
+  const canUpload = useCan('AttachmentService:Upload');
 
-  // All available scanned pages (either from scannedPages array or scannedFileUrl)
-  const scannedPagesList =
-    doc.scannedPages && doc.scannedPages.length > 0
-      ? doc.scannedPages
-      : doc.scannedFileUrl
-      ? [doc.scannedFileUrl]
-      : [];
+  // Step 6 close flow state.
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [finalAttachmentId, setFinalAttachmentId] = useState<string | null>(null);
+  const [folderId, setFolderId] = useState('');
+  const [closeNotes, setCloseNotes] = useState('');
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [folders, setFolders] = useState<Folder[]>([]);
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadFile(file);
-    setUploadFileName(file.name);
-    setUploadFileSize(formatBytes(file.size));
-    setUploadFileType(file.type || 'application/octet-stream');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadFileDataUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
+  const selectedDoc: Document | null =
+    documents.find((d) => d.id === selectedDocId) ?? documents[0] ?? null;
 
-  const handleSaveUploadAttachment = () => {
-    if (!uploadFileDataUrl) return;
-    const displayName = uploadFileLabel.trim()
-      ? `${uploadFileLabel.trim()} (${uploadFileName})`
-      : uploadFileName;
-    const newAttachment: Attachment = {
-      id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      fileName: displayName,
-      fileSize: uploadFileSize || 'Verified',
-      fileType: uploadFileType,
-      uploadedBy: currentUser.fullName,
-      uploadedAt: new Date().toISOString(),
-      fileDataUrl: uploadFileDataUrl,
-    };
-    handleAttachDocument(doc.id, newAttachment);
-    setAttachSuccessMsg(`Attached "${displayName}" to docket.`);
-    setTimeout(() => setAttachSuccessMsg(null), 3000);
-    setUploadFile(null);
-    setUploadFileName('');
-    setUploadFileLabel('');
-    setUploadFileDataUrl(null);
-    setAttachModalOpen(false);
-  };
+  const documentAttachmentRows = documents.flatMap((doc) =>
+    (doc.attachments ?? []).map((att) => ({ att, doc })),
+  );
+  const existingSignedFinal =
+    documentAttachmentRows.find((row) => row.att.kind === 'SIGNED_FINAL') ?? null;
 
-  const handleScannerAnnexesComplete = (pages: string[], scannerAttachments: Attachment[]) => {
-    if (pages.length > 0) {
-      pages.forEach((pageDataUrl, idx) => {
-        const newAttachment: Attachment = {
-          id: `att-scan-${Date.now()}-${idx}`,
-          fileName: `Scanned_Annex_Sheet_${(doc.attachments?.length || 0) + idx + 1}.jpg`,
-          fileSize: 'High Resolution Scan',
-          fileType: 'image/jpeg',
-          uploadedBy: currentUser.fullName,
-          uploadedAt: new Date().toISOString(),
-          fileDataUrl: pageDataUrl,
-        };
-        handleAttachDocument(doc.id, newAttachment);
-      });
+  const requestMeta = resolveStatusMeta(REQUEST_STATUS_META, dossier.status);
+  const priorityLabel = REQUEST_PRIORITY_LABELS[dossier.priority] ?? dossier.priority;
+  const channelLabel = REQUEST_CHANNEL_LABELS[dossier.channel] ?? dossier.channel;
+  // Capture "now" asynchronously (keeps the render pure); drives the SLA flag.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const id = setTimeout(() => setNow(Date.now()), 0);
+    return () => clearTimeout(id);
+  }, []);
+  const overdue =
+    dossier.status !== 'CLOSED' &&
+    now !== null &&
+    new Date(dossier.slaDeadline).getTime() < now;
 
-      const updatedScanned = [...(doc.scannedPages || []), ...pages];
-      handleUpdateDocument({
-        ...doc,
-        scannedPages: updatedScanned,
-      });
+  const canReview = useCan(
+    'DocumentService:Review',
+    selectedDoc ? { kind: 'document', attributes: { status: selectedDoc.status } } : null,
+  );
+  const canSign = useCan(
+    'DocumentService:Sign',
+    selectedDoc
+      ? {
+          kind: 'document',
+          attributes: {
+            status: selectedDoc.status,
+            signatoryRequired: selectedDoc.signatoryRequired,
+          },
+        }
+      : null,
+  );
+  const canTransmit = useCan(
+    'DocumentService:Transmit',
+    selectedDoc ? { kind: 'document', attributes: { status: selectedDoc.status } } : null,
+  );
+  const canClose = useCan('DocumentService:Close', {
+    kind: 'request',
+    attributes: { status: dossier.status },
+  });
 
-      setAttachSuccessMsg(`Added ${pages.length} scanned page(s) as verified annexes.`);
-      setTimeout(() => setAttachSuccessMsg(null), 3000);
-      setAttachModalOpen(false);
+  // Step 4 decision actions belong to the review desk. A transmitted or closed
+  // request is past it, so return / endorse / approve / sign must not be offered
+  // (a closed request is read-only, FR-31). Transmission is offered per document
+  // and only until that document has a transmission recorded.
+  const pastReview = PAST_REVIEW_STATUSES.has(dossier.status);
+  const documentTransmitted = (selectedDoc?.transmissions?.length ?? 0) > 0;
+
+  const runReview = async (decision: ReviewDecision, reason?: string) => {
+    if (!selectedDoc) return;
+    setBusy(true);
+    const result = await reviewDocument({
+      documentId: selectedDoc.id,
+      decision,
+      denialReason: decision === 'DENIED' ? reason ?? null : null,
+      decisionNotes: null,
+    });
+    setBusy(false);
+    if (result) {
+      setDenialOpen(false);
+      setDenialReason('');
+      refresh();
     }
   };
 
-  const handleLinkExistingDocket = () => {
-    if (!linkDocId) return;
-    const target = documents.find((d) => d.id === linkDocId || d.controlNumber === linkDocId);
-    if (!target) return;
-    const linkAttachment: Attachment = {
-      id: `att-link-${Date.now()}`,
-      fileName: `Referenced Docket: ${target.controlNumber} - ${target.title}`,
-      fileSize: 'Registry Cross-Reference',
-      fileType: 'application/docket-reference',
-      uploadedBy: currentUser.fullName,
-      uploadedAt: new Date().toISOString(),
-      fileDataUrl: target.scannedFileUrl || undefined,
-    };
-    handleAttachDocument(doc.id, linkAttachment);
-    setAttachSuccessMsg(`Linked reference docket ${target.controlNumber}.`);
-    setTimeout(() => setAttachSuccessMsg(null), 3000);
-    setLinkDocId('');
-    setAttachModalOpen(false);
-  };
-
-  const handleDeleteAttachment = (attId: string) => {
-    if (!confirm('Are you sure you want to remove this attached record from the official docket?')) return;
-    const remaining = (doc.attachments || []).filter((a) => a.id !== attId);
-    handleUpdateDocument({
-      ...doc,
-      attachments: remaining,
+  const runSign = async () => {
+    if (!selectedDoc) return;
+    setBusy(true);
+    const result = await signDocument({
+      documentId: selectedDoc.id,
+      signedBy: currentUser.fullName,
     });
+    setBusy(false);
+    if (result) refresh();
   };
 
-  const handleDraftInStudio = () => {
-    setPrepareTargetDocId(doc.id);
-    onClose();
-    router.push('/prepare');
+  const runTransmit = async () => {
+    if (!selectedDoc) return;
+    if (!recipientName.trim() || !receivingOffice.trim() || !receivedBy.trim()) return;
+    setBusy(true);
+    const result = await transmitDocument({
+      documentId: selectedDoc.id,
+      recipientName: recipientName.trim(),
+      receivingOffice: receivingOffice.trim(),
+      receivedBy: receivedBy.trim(),
+      method,
+    });
+    setBusy(false);
+    if (result) {
+      setTransmitOpen(false);
+      setRecipientName('');
+      setReceivingOffice('');
+      setReceivedBy('');
+      refresh();
+    }
   };
 
-  const handleApprove = () => {
-    onUpdateStatus(
-      doc.id,
-      'APPROVED',
-      `Approved by ${currentUser.fullName} (${currentUser.title})`
-    );
+  const openClosePanel = () => {
+    setCloseError(null);
+    setFinalAttachmentId(null);
+    setFolderId('');
+    setCloseNotes('');
+    setCloseOpen(true);
+    void loadFoldersAction.run(null).then((loaded) => setFolders(loaded ?? []));
   };
 
-  const handleEndorse = () => {
-    onUpdateStatus(
-      doc.id,
-      'ENDORSED',
-      `Endorsed to Sangguniang Bayan / Concerned Office by ${currentUser.fullName} (${currentUser.title})`
-    );
-  };
-
-  const handleDenySubmit = () => {
-    if (!denialReasonText.trim()) return;
-    onUpdateStatus(
-      doc.id,
-      'DENIED',
-      `Formally returned / denied by ${currentUser.fullName}. Grounds: ${denialReasonText}`
-    );
-    setDenialModalOpen(false);
-  };
-
-  const handleTransmitSubmit = () => {
-    if (!transmitRecipient.trim()) return;
-    onUpdateStatus(
-      doc.id,
-      'TRANSMITTED',
-      `Dispatched to ${transmitRecipient} (${transmitOffice || 'Receiving Department'}) by ${currentUser.fullName}`
-    );
-    setTransmitModalOpen(false);
-  };
-
-  const handleScreenPass = () => {
-    onUpdateStatus(
-      doc.id,
-      'PREPARATION',
-      `Screening checklist passed. Docket forwarded for drafting by ${currentUser.fullName}`
-    );
-  };
-
-  const handleCloseAndArchive = () => {
-    onUpdateStatus(
-      doc.id,
-      'CLOSED',
-      `Transaction officially fulfilled and archived into permanent records by ${currentUser.fullName}`
-    );
-  };
-
-  const handleProofFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleSignedFinalFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setTransmitProofUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    if (!selectedDoc) {
+      setCloseError('No linked document is available to attach the signed final copy.');
+      return;
+    }
+    setCloseError(null);
+    const uploaded = await uploadFinalAction.run({
+      documentId: selectedDoc.id,
+      kind: 'SIGNED_FINAL',
+      file,
+    });
+    if (uploaded) {
+      setFinalAttachmentId(uploaded.id);
+      toast.success(`Signed final copy of ${selectedDoc.controlNo} attached.`);
+    } else {
+      const message = uploadFinalAction.getError()?.message ?? 'Unable to upload the signed final copy.';
+      setCloseError(message);
+      toast.error(message);
+    }
   };
+
+  const runClose = async () => {
+    const effectiveFinalId = finalAttachmentId ?? existingSignedFinal?.att.id ?? null;
+    if (!effectiveFinalId) {
+      setCloseError(
+        'A signed final copy is required before closing this request. Upload it above, then close.',
+      );
+      return;
+    }
+    setBusy(true);
+    setCloseError(null);
+    const result = await closeRequest({
+      requestId: dossier.id,
+      finalAttachmentId: effectiveFinalId,
+      folderId: folderId ? folderId : null,
+      notes: closeNotes.trim() ? closeNotes.trim() : null,
+    });
+    setBusy(false);
+    if (result) {
+      setCloseOpen(false);
+      refresh();
+      refreshCounts();
+    } else {
+      setCloseError(lastError?.message ?? 'The request could not be closed. Please try again.');
+    }
+  };
+
+  const openRequestAttachment = async (id: string, inline: boolean) => {
+    try {
+      const ticket = await getRequestAttachmentDownload(id, inline);
+      window.open(ticket.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      // The service normalizes failures; nothing more to do here.
+    }
+  };
+
+  const openDocumentAttachment = async (id: string, inline: boolean) => {
+    try {
+      const ticket = await getDocumentAttachmentDownload(id, inline);
+      window.open(ticket.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      // The service normalizes failures; nothing more to do here.
+    }
+  };
+
+  const formatDateTime = (value: string) =>
+    new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 
   return (
     <div
@@ -283,21 +319,19 @@ export default function DocumentDetailModal({
         {/* Modal Header */}
         <div className="bg-[#081E36] text-white px-6 py-4 flex items-center justify-between border-b-2 border-[#15803D]">
           <div className="flex items-center gap-3">
-            <span
-              className="w-3 h-3 rounded-full shrink-0"
-              style={{ backgroundColor: typeMeta.color }}
-            />
+            <span className="w-3 h-3 rounded-full shrink-0 bg-[#15803D]" />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-xs font-bold text-[#FCD116]">
-                  {doc.controlNumber}
+                  {dossier.controlNo}
                 </span>
+                <span className={`status-badge ${requestMeta.badgeCls}`}>{requestMeta.label}</span>
                 <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded">
-                  {typeMeta.label}
+                  {priorityLabel} Priority
                 </span>
               </div>
               <h2 className="font-cinzel text-base font-bold text-white line-clamp-1">
-                {doc.title}
+                {dossier.title}
               </h2>
             </div>
           </div>
@@ -309,28 +343,17 @@ export default function DocumentDetailModal({
           </button>
         </div>
 
-        {/* Workflow Progress Stepper (6 Official Steps per project_brief.md) */}
+        {/* Workflow Progress Stepper */}
         <div className="bg-[#F8FAFC] border-b border-[#CBD5E1] px-6 py-3 overflow-x-auto">
-          <div className="flex items-center justify-between min-w-[560px] text-[11px] font-bold text-[#64748B]">
-            {[
-              { num: 1, key: 'RECEIVED', label: '1. Reception' },
-              { num: 2, key: 'SCREENING', label: '2. Screening' },
-              { num: 3, key: 'PREPARATION', label: '3. Preparation' },
-              { num: 4, key: 'REVIEW', label: '4. Review / Approval' },
-              { num: 5, key: 'TRANSMITTED', label: '5. Transmission' },
-              { num: 6, key: 'CLOSED', label: '6. Archiving' },
-            ].map((step, idx) => {
-              const isCurrent = statusMeta.stepNumber === step.num;
-              const isDone = statusMeta.stepNumber > step.num || doc.status === 'CLOSED';
+          <div className="flex items-center justify-between min-w-[660px] text-[11px] font-bold text-[#64748B]">
+            {WORKFLOW_STEPS.map((step, idx) => {
+              const isCurrent = requestMeta.stepNumber === step.num;
+              const isDone = requestMeta.stepNumber > step.num || dossier.status === 'CLOSED';
               return (
                 <React.Fragment key={step.num}>
                   <div
                     className={`flex items-center gap-1.5 ${
-                      isCurrent
-                        ? 'text-[#15803D]'
-                        : isDone
-                        ? 'text-[#081E36]'
-                        : 'text-[#94A3B8]'
+                      isCurrent ? 'text-[#15803D]' : isDone ? 'text-[#081E36]' : 'text-[#94A3B8]'
                     }`}
                   >
                     <span
@@ -338,15 +361,17 @@ export default function DocumentDetailModal({
                         isCurrent
                           ? 'bg-[#15803D] text-white font-bold'
                           : isDone
-                          ? 'bg-[#081E36] text-white'
-                          : 'border border-[#CBD5E1]'
+                            ? 'bg-[#081E36] text-white'
+                            : 'border border-[#CBD5E1]'
                       }`}
                     >
                       {step.num}
                     </span>
                     <span>{step.label}</span>
                   </div>
-                  {idx < 5 && <span className="text-[#CBD5E1]">&gt;</span>}
+                  {idx < WORKFLOW_STEPS.length - 1 && (
+                    <span className="text-[#CBD5E1]">&gt;</span>
+                  )}
                 </React.Fragment>
               );
             })}
@@ -354,441 +379,321 @@ export default function DocumentDetailModal({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-[#CBD5E1] bg-[#F1F5F9] px-6 text-xs font-bold">
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`py-2.5 px-4 border-b-2 cursor-pointer transition-colors ${
-              activeTab === 'details'
-                ? 'border-[#15803D] text-[#15803D] bg-white'
-                : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-            }`}
-          >
-            Docket Overview & Annexes ({doc.attachments?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveTab('scans')}
-            className={`py-2.5 px-4 border-b-2 cursor-pointer transition-colors ${
-              activeTab === 'scans'
-                ? 'border-[#15803D] text-[#15803D] bg-white'
-                : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-            }`}
-          >
-            Scanned Dossier ({scannedPagesList.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`py-2.5 px-4 border-b-2 cursor-pointer transition-colors ${
-              activeTab === 'preview'
-                ? 'border-[#15803D] text-[#15803D] bg-white'
-                : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-            }`}
-          >
-            Word Document Preview & Print
-          </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`py-2.5 px-4 border-b-2 cursor-pointer transition-colors ${
-              activeTab === 'audit'
-                ? 'border-[#15803D] text-[#15803D] bg-white'
-                : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-            }`}
-          >
-            Audit Trail ({docAuditLogs.length})
-          </button>
+        <div className="flex border-b border-[#CBD5E1] bg-[#F1F5F9] px-6 text-xs font-bold overflow-x-auto">
+          {(
+            [
+              { id: 'dossier', label: `Request Dossier (${documents.length})` },
+              { id: 'attachments', label: `Annexes (${attachments.length + documentAttachmentRows.length})` },
+              { id: 'audit', label: `Audit Trail (${logs.length})` },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2.5 px-4 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-[#15803D] text-[#15803D] bg-white'
+                  : 'border-transparent text-[#64748B] hover:text-[#081E36]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Modal Scrollable Content */}
+        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* TAB 1: Details & Annexes */}
-          {activeTab === 'details' && (
+          {lastError && (
+            <div className="p-3 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold">
+              {lastError.message}
+            </div>
+          )}
+
+          {activeTab === 'dossier' && (
             <div className="space-y-6">
-              {/* Core Metadata Table Grid */}
+              {/* Request Metadata */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-[#F8FAFC] border border-[#CBD5E1] rounded text-xs">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-                    Requesting Signatory
+                    Requesting Party
                   </span>
-                  <span className="font-semibold text-[#0F172A]">{doc.requestingParty}</span>
+                  <span className="font-semibold text-[#0F172A]">{dossier.requestingParty}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
                     Originating Office
                   </span>
-                  <span className="font-semibold text-[#0F172A]">{doc.originOffice}</span>
+                  <span className="font-semibold text-[#0F172A]">{dossier.originOffice}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-                    Current Status
+                    Channel
                   </span>
-                  <span className="font-bold text-[#081E36]">{statusMeta.label}</span>
+                  <span className="font-semibold text-[#0F172A]">{channelLabel}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
                     Date Received (Logbook)
                   </span>
                   <span className="font-mono text-[#0F172A]">
-                    {new Date(doc.dateReceived).toLocaleString('en-PH', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
+                    {formatDateTime(dossier.receivedAt)}
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
                     Mandated 3-Day SLA Deadline
                   </span>
-                  <span
-                    className={`font-mono font-bold ${
-                      doc.isOverdue ? 'text-[#991B1B]' : 'text-[#15803D]'
-                    }`}
-                  >
-                    {new Date(doc.slaDeadline).toLocaleString('en-PH', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}{' '}
-                    {doc.isOverdue && '(OVERDUE)'}
+                  <span className={`font-mono font-bold ${overdue ? 'text-[#334155]' : 'text-[#15803D]'}`}>
+                    {formatDateTime(dossier.slaDeadline)} {overdue && '(OVERDUE)'}
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#64748B] block">
-                    Assigned Officer
+                    Current Status
                   </span>
-                  <span className="font-semibold text-[#0F172A]">
-                    {doc.assignedTo || 'Unassigned (General Queue)'}
-                  </span>
+                  <span className="font-bold text-[#081E36]">{requestMeta.label}</span>
                 </div>
               </div>
 
-              {/* Endorsement Notes or Formal Denial Grounds */}
-              {doc.denialReason && (
-                <div className="p-3 bg-[#F8FAFC] border-l-4 border-[#334155] rounded text-[#0F172A] text-xs">
-                  <strong className="block text-[11px] uppercase text-[#081E36]">
-                    Statutory Denial / Return Grounds:
-                  </strong>
-                  <p className="mt-1 text-[#334155]">{doc.denialReason}</p>
-                </div>
-              )}
-
-              {doc.endorsementNotes && (
-                <div className="p-3 bg-[#F0FDF4] border-l-4 border-[#15803D] rounded text-[#166534] text-xs">
-                  <strong className="block text-[11px] uppercase">
-                    Executive Endorsement Directives:
-                  </strong>
-                  <p className="mt-1">{doc.endorsementNotes}</p>
-                </div>
-              )}
-
-              {/* Physical Transmittal Details (If Dispatched) */}
-              {doc.transmissionDetails && (
-                <div className="p-4 bg-[#F0F9FF] border border-[#BAE6FD] rounded text-xs space-y-2">
-                  <div className="flex items-center justify-between font-bold text-[#0369A1] uppercase text-[11px]">
-                    <span className="flex items-center gap-1.5">
-                      <Send size={14} />
-                      Outgoing Dispatch & Transmittal Record
-                    </span>
-                    <span className="font-mono text-[#0284C7]">
-                      {new Date(doc.transmissionDetails.transmittedDate).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#0F172A]">
-                    <div>
-                      <span className="text-[#64748B] block text-[10px]">Recipient Signatory:</span>
-                      <strong>{doc.transmissionDetails.recipientName}</strong>
-                    </div>
-                    <div>
-                      <span className="text-[#64748B] block text-[10px]">Receiving Department:</span>
-                      <strong>{doc.transmissionDetails.transmittedToOffice}</strong>
-                    </div>
-                    <div>
-                      <span className="text-[#64748B] block text-[10px]">Physical Receiving Officer:</span>
-                      <span>{doc.transmissionDetails.receivedBy}</span>
-                    </div>
-                    {doc.transmissionDetails.proofDataUrl && (
-                      <div>
-                        <span className="text-[#64748B] block text-[10px]">Signed Receipt Proof:</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setViewingAttachment({
-                              id: 'trans-proof',
-                              fileName: 'Signed_Transmittal_Receipt.jpg',
-                              fileSize: 'Verified',
-                              fileType: 'image/jpeg',
-                              uploadedBy: 'Dispatch Officer',
-                              uploadedAt: doc.transmissionDetails!.transmittedDate,
-                              fileDataUrl: doc.transmissionDetails!.proofDataUrl,
-                            })
-                          }
-                          className="text-[#0284C7] hover:underline font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <Eye size={12} />
-                          <span>View Signed Delivery Receipt</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Real Attached Records & Scans */}
+              {/* Linked Documents */}
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
-                      Verified Digital Annexes & Uploaded Records ({doc.attachments?.length || 0})
-                    </h4>
-                    <span className="text-[10px] text-[#64748B]">
-                      Official supporting documents, citizen letters, and evidentiary annexes.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAttachMode('upload');
-                      setAttachModalOpen(true);
-                    }}
-                    className="btn-fluid px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Plus size={14} />
-                    <span>Attach Document / Scan</span>
-                  </button>
-                </div>
+                <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
+                  Linked Issuances & Documents ({documents.length})
+                </h4>
 
-                {attachSuccessMsg && (
-                  <div className="p-2.5 bg-[#F0FDF4] border border-[#86EFAC] rounded text-xs text-[#166534] font-bold flex items-center gap-2 animate-fluid-fade">
-                    <CheckCircle2 size={15} />
-                    <span>{attachSuccessMsg}</span>
+                {documents.length === 0 ? (
+                  <div className="p-6 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-center space-y-2">
+                    <FileText size={28} className="mx-auto text-[#94A3B8]" />
+                    <div className="font-bold text-xs text-[#081E36]">No Documents Linked Yet</div>
+                    <p className="text-[11px] text-[#64748B] max-w-sm mx-auto">
+                      This request has no output documents on record. Draft one in the preparation
+                      studio and submit it for executive review.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white text-xs">
+                    {documents.map((doc) => {
+                      const isSelected = selectedDoc?.id === doc.id;
+                      const docMeta = resolveStatusMeta(DOCUMENT_STATUS_META, doc.status);
+                      return (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => setSelectedDocId(doc.id)}
+                          className={`w-full text-left p-3 flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-[#F0FDF4]' : 'hover:bg-[#F8FAFC]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <FileText size={18} className="text-[#081E36] shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-xs text-[#0F172A] truncate">
+                                {doc.title}
+                              </div>
+                              <div className="text-[10px] text-[#64748B] font-mono">
+                                {doc.controlNo}
+                                {doc.assignedTo ? ` - Drafter: ${doc.assignedTo}` : ''}
+                                {doc.signatoryRequired ? ' - Signature required' : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`status-badge ${docMeta.badgeCls} shrink-0`}>
+                            {docMeta.label}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
-                {doc.attachments && doc.attachments.length > 0 ? (
+                {selectedDoc && (selectedDoc.denialReason || selectedDoc.decisionNotes || selectedDoc.signedBy) && (
+                  <div className="p-3 bg-[#F8FAFC] border-l-4 border-[#334155] rounded text-[#0F172A] text-xs space-y-1">
+                    {selectedDoc.denialReason && (
+                      <div>
+                        <strong className="block text-[11px] uppercase text-[#081E36]">
+                          Denial / Return Grounds:
+                        </strong>
+                        <p className="mt-0.5 text-[#334155]">{selectedDoc.denialReason}</p>
+                      </div>
+                    )}
+                    {selectedDoc.decisionNotes && (
+                      <div>
+                        <strong className="block text-[11px] uppercase text-[#081E36]">
+                          Decision Notes:
+                        </strong>
+                        <p className="mt-0.5 text-[#334155]">{selectedDoc.decisionNotes}</p>
+                      </div>
+                    )}
+                    {selectedDoc.signedBy && (
+                      <div className="text-[11px] text-[#475569]">
+                        Signed by <strong>{selectedDoc.signedBy}</strong>
+                        {selectedDoc.signedAt ? ` on ${formatDateTime(selectedDoc.signedAt)}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'attachments' && (
+            <div className="space-y-6">
+              {/* Request annexes */}
+              <div className="space-y-3">
+                <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
+                  Verified Digital Annexes & Uploaded Records ({attachments.length})
+                </h4>
+
+                {attachments.length === 0 ? (
+                  <div className="p-6 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-center space-y-2">
+                    <Paperclip size={28} className="mx-auto text-[#94A3B8]" />
+                    <div className="font-bold text-xs text-[#081E36]">No Supporting Documents Attached</div>
+                    <p className="text-[11px] text-[#64748B] max-w-sm mx-auto">
+                      Annexes are uploaded at intake from the reception desk.
+                    </p>
+                  </div>
+                ) : (
                   <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white text-xs">
-                    {doc.attachments.map((att) => (
+                    {attachments.map((att) => (
                       <div
                         key={att.id}
                         className="p-3 flex items-center justify-between hover:bg-[#F8FAFC] transition-colors gap-2"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <FileText size={18} className="text-[#081E36] shrink-0" />
+                          <Paperclip size={16} className="text-[#081E36] shrink-0" />
                           <div className="min-w-0">
                             <div className="font-semibold text-xs text-[#0F172A] truncate">
-                              {att.fileName}
+                              {att.originalName}
                             </div>
                             <div className="text-[10px] text-[#64748B]">
-                              Uploaded by {att.uploadedBy} - {att.fileSize} -{' '}
-                              {new Date(att.uploadedAt).toLocaleDateString()}
+                              {att.kind} - {att.mimeType} - {att.uploadedBy}
+                              {att.createdAt ? ` - ${new Date(att.createdAt).toLocaleDateString()}` : ''}
                             </div>
                           </div>
                         </div>
-
                         <div className="flex items-center gap-2 shrink-0">
-                          {att.fileDataUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setViewingAttachment(att)}
-                              className="btn-fluid px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer inline-flex items-center gap-1 shadow-sm"
-                            >
-                              <Eye size={13} />
-                              <span>View File</span>
-                            </button>
-                          )}
-                          {att.fileDataUrl && (
-                            <a
-                              href={att.fileDataUrl}
-                              download={att.fileName}
-                              className="btn-fluid p-1.5 border border-[#CBD5E1] hover:bg-[#F1F5F9] text-[#081E36] rounded cursor-pointer"
-                              title="Download to Local Workstation"
-                            >
-                              <Download size={14} />
-                            </a>
-                          )}
                           <button
                             type="button"
-                            onClick={() => handleDeleteAttachment(att.id)}
-                            className="btn-fluid p-1.5 border border-[#CBD5E1] hover:bg-[#FEE2E2] hover:text-[#991B1B] text-[#64748B] rounded cursor-pointer"
-                            title="Remove attached document"
+                            onClick={() => openRequestAttachment(att.id, true)}
+                            className="btn-fluid px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer inline-flex items-center gap-1 shadow-sm"
                           >
-                            <Trash2 size={13} />
+                            <Eye size={13} />
+                            <span>View File</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openRequestAttachment(att.id, false)}
+                            className="btn-fluid p-1.5 border border-[#CBD5E1] hover:bg-[#F1F5F9] text-[#081E36] rounded cursor-pointer"
+                            title="Download to Local Workstation"
+                          >
+                            <Download size={14} />
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
+                )}
+              </div>
+
+              {/* Document attachments (drafts, signed finals, transmission proofs) */}
+              <div className="space-y-3">
+                <h4 className="font-bold uppercase text-[11px] text-[#081E36] tracking-wide">
+                  Document Attachments ({documentAttachmentRows.length})
+                </h4>
+
+                {documentAttachmentRows.length === 0 ? (
                   <div className="p-6 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-center space-y-2">
                     <Paperclip size={28} className="mx-auto text-[#94A3B8]" />
-                    <div className="font-bold text-xs text-[#081E36]">No Supporting Documents Attached Yet</div>
+                    <div className="font-bold text-xs text-[#081E36]">No Document Attachments</div>
                     <p className="text-[11px] text-[#64748B] max-w-sm mx-auto">
-                      Attach citizen petitions, Sangguniang resolutions, endorsement letters, or capture physical documents via camera scan.
+                      Drafts, signed final copies, and transmission proofs appear here once uploaded.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAttachMode('upload');
-                        setAttachModalOpen(true);
-                      }}
-                      className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm mt-1"
-                    >
-                      <Plus size={14} />
-                      <span>Attach Document or Camera Scan</span>
-                    </button>
+                  </div>
+                ) : (
+                  <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white text-xs">
+                    {documentAttachmentRows.map(({ att, doc }) => (
+                      <div
+                        key={att.id}
+                        className="p-3 flex items-center justify-between hover:bg-[#F8FAFC] transition-colors gap-2"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FileText size={16} className="text-[#081E36] shrink-0" />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-xs text-[#0F172A] truncate">
+                              {att.originalName}
+                            </div>
+                            <div className="text-[10px] text-[#64748B]">
+                              {att.kind} - {doc.controlNo} - {att.mimeType}
+                              {att.createdAt ? ` - ${new Date(att.createdAt).toLocaleDateString()}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openDocumentAttachment(att.id, true)}
+                            className="btn-fluid px-2.5 py-1 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer inline-flex items-center gap-1 shadow-sm"
+                          >
+                            <Eye size={13} />
+                            <span>View File</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDocumentAttachment(att.id, false)}
+                            className="btn-fluid p-1.5 border border-[#CBD5E1] hover:bg-[#F1F5F9] text-[#081E36] rounded cursor-pointer"
+                            title="Download to Local Workstation"
+                          >
+                            <Download size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* TAB 2: Real Scanned Dossier (Multi-Page Camera/Feeder Scans) */}
-          {activeTab === 'scans' && (
-            <div className="space-y-4">
-              {scannedPagesList.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold text-[#081E36] uppercase tracking-wide flex items-center gap-2">
-                      <FileCheck size={16} className="text-[#15803D]" />
-                      <span>
-                        Digitized Physical Document (Page {activeScanPageIndex + 1} of{' '}
-                        {scannedPagesList.length})
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {scannedPagesList.map((_, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setActiveScanPageIndex(idx)}
-                          className={`w-6 h-6 rounded text-xs font-mono font-bold cursor-pointer transition-colors ${
-                            activeScanPageIndex === idx
-                              ? 'bg-[#15803D] text-white'
-                              : 'bg-[#E2E8F0] text-[#334155] hover:bg-[#CBD5E1]'
-                          }`}
-                        >
-                          {idx + 1}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Scanned Page Viewport */}
-                  <div className="border border-[#CBD5E1] rounded-lg p-2 bg-[#F1F5F9] flex items-center justify-center min-h-[420px] max-h-[580px] overflow-hidden">
-                    {scannedPagesList[activeScanPageIndex].startsWith('data:application/pdf') ? (
-                      <iframe
-                        src={scannedPagesList[activeScanPageIndex]}
-                        title="Scanned PDF Page"
-                        className="w-full h-[520px] border-0 rounded bg-white"
-                      />
-                    ) : (
-                      <img
-                        src={scannedPagesList[activeScanPageIndex]}
-                        alt={`Scanned Page ${activeScanPageIndex + 1}`}
-                        className="max-h-[520px] w-auto object-contain rounded shadow"
-                      />
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-[#64748B]">
-                    <span>Control Number: {doc.controlNumber}</span>
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="px-3 py-1.5 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#081E36] rounded font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Printer size={14} />
-                      <span>Print Scanned Page</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-8 text-center bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg space-y-3">
-                  <Camera size={36} className="mx-auto text-[#94A3B8]" />
-                  <div className="font-bold text-sm text-[#081E36]">No Physical Scans Found</div>
-                  <p className="text-xs text-[#64748B] max-w-sm mx-auto">
-                    This document was intaked electronically without physical page scans attached. You can scan and attach physical paper pages using your camera or feeder.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAttachMode('scanner');
-                      setAttachModalOpen(true);
-                    }}
-                    className="btn-fluid px-3.5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Camera size={14} />
-                    <span>Scan Physical Pages via Camera</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: Microsoft Word Executive Document Preview & Print */}
-          {activeTab === 'preview' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between no-print bg-[#F1F5F9] p-3 rounded-lg border border-[#CBD5E1] gap-2">
-                <div>
-                  <h4 className="font-bold text-xs text-[#081E36] uppercase tracking-wide">
-                    Microsoft Word Executive Issuance Layout
-                  </h4>
-                  <p className="text-[11px] text-[#64748B]">
-                    Formatted according to National Government Standards with dual heraldic seals, double header rule, justified provisions, and official signatory block.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDraftInStudio}
-                    className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] hover:bg-white text-[#081E36] rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <FileText size={13} />
-                    <span>Edit in Studio</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWordPreviewDoc(doc)}
-                    className="btn-fluid px-3.5 py-1.5 bg-[#FCD116] hover:bg-[#FACC15] text-[#081E36] rounded text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Printer size={13} />
-                    <span>Print Word Document</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto p-2 sm:p-4 bg-[#E2E8F0] rounded-lg">
-                <OfficialWordDocument document={doc} showToolbar={false} />
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: Audit Trail */}
           {activeTab === 'audit' && (
             <div className="space-y-3">
               <h4 className="font-bold uppercase text-[11px] text-[#081E36]">
                 Immutable Statutory Audit Trail (RA 10175 Compliance)
               </h4>
-              <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white">
-                {docAuditLogs.map((log) => (
-                  <div key={log.id} className="p-3 text-xs">
-                    <div className="flex items-center justify-between text-[#64748B] text-[10px] mb-1">
-                      <span className="font-bold text-[#081E36]">{log.action}</span>
-                      <span className="font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+              {logs.length === 0 ? (
+                <div className="p-6 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-center text-xs text-[#64748B]">
+                  No audit entries recorded yet.
+                </div>
+              ) : (
+                <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white">
+                  {logs.map((log) => (
+                    <div key={log.id} className="p-3 text-xs">
+                      <div className="flex items-center justify-between text-[#64748B] text-[10px] mb-1">
+                        <span className="font-bold text-[#081E36]">
+                          {DOCUMENT_LOG_ACTION_LABELS[log.actionType] ?? log.actionType}
+                        </span>
+                        <span className="font-mono">
+                          {log.createdAt ? new Date(log.createdAt).toLocaleString() : ''}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-[#0F172A]">
+                        {log.actorName} ({log.actorRole})
+                      </div>
+                      <p className="text-[#334155] mt-0.5">
+                        {renderTemplate(log.template, log.payload)}
+                      </p>
                     </div>
-                    <div className="font-semibold text-[#0F172A]">
-                      {log.userName} ({log.userRole})
-                    </div>
-                    <p className="text-[#334155] mt-0.5">{log.details}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Operational Footer Bar with Direct Actions */}
+        {/* Operational Footer Bar */}
         <div className="bg-[#F8FAFC] border-t border-[#CBD5E1] px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onPrintRoutingSlip(doc)}
+              onClick={() => setRoutingSlipRequest(dossier)}
               className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#081E36] rounded text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
               title="Print 1-Page Official Transmittal & ARTA Routing Slip"
             >
@@ -796,187 +701,110 @@ export default function DocumentDetailModal({
               <span>Routing Slip</span>
             </button>
             <button
-              onClick={() => setWordPreviewDoc(doc)}
+              onClick={() => setWordPreviewRequest(dossier)}
               className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-xs font-semibold cursor-pointer shadow-xs transition-colors"
               title="Print Document formatted in authentic Microsoft Word layout"
             >
               <Printer size={13} className="text-[#FCD116]" />
               <span>Word Print</span>
             </button>
-            <button
-              onClick={handleDraftInStudio}
-              className="btn-fluid flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[#334155] hover:text-[#081E36] rounded text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-              title="Draft or edit official Executive Order or Indorsement for this docket"
-            >
-              <FileText size={13} className="text-[#64748B]" />
-              <span>Draft in Studio</span>
-            </button>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Step 2 Screening Pass */}
-            {doc.status === 'SCREENING' && (role === 'CLERK_ENCODER' || role === 'ADMINISTRATOR') && (
+            {selectedDoc && canReview && !pastReview && (
+              <>
+                <button
+                  onClick={() => setDenialOpen(true)}
+                  disabled={busy}
+                  className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#334155] hover:bg-[#1E293B] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  <Ban size={14} />
+                  <span>Return / Deny</span>
+                </button>
+                <button
+                  onClick={() => runReview('ENDORSED')}
+                  disabled={busy}
+                  className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#0D9488] hover:bg-[#0F766E] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  <Send size={14} />
+                  <span>Endorse to SB</span>
+                </button>
+                <button
+                  onClick={() => runReview('APPROVED')}
+                  disabled={busy}
+                  className="btn-fluid flex items-center gap-1 px-3.5 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  <Check size={14} />
+                  <span>Approve</span>
+                </button>
+              </>
+            )}
+
+            {selectedDoc && canSign && !pastReview && (
               <button
-                onClick={handleScreenPass}
-                className="btn-fluid px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
+                onClick={runSign}
+                disabled={busy}
+                className="btn-fluid flex items-center gap-1 px-3.5 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50"
               >
-                Pass Screening & Forward to Drafting
+                <PenLine size={14} />
+                <span>Record Signature</span>
               </button>
             )}
 
-            {/* Administrator / EA II Review Decisions */}
-            {(role === 'ADMINISTRATOR' || role === 'EXECUTIVE_ASSISTANT') &&
-              (doc.status === 'REVIEW' || doc.status === 'SCREENING') && (
-                <>
-                  <button
-                    onClick={() => setDenialModalOpen(true)}
-                    className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#334155] hover:bg-[#1E293B] text-white rounded text-xs font-bold cursor-pointer"
-                  >
-                    <Ban size={14} />
-                    <span>Return / Deny</span>
-                  </button>
-                  <button
-                    onClick={handleEndorse}
-                    className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#0D9488] hover:bg-[#0F766E] text-white rounded text-xs font-bold cursor-pointer"
-                  >
-                    <Send size={14} />
-                    <span>Endorse to SB</span>
-                  </button>
-                  <button
-                    onClick={handleApprove}
-                    className="btn-fluid flex items-center gap-1 px-3.5 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
-                  >
-                    <Check size={14} />
-                    <span>Approve Request</span>
-                  </button>
-                </>
-              )}
-
-            {/* Step 5: Outgoing Transmission */}
-            {doc.status === 'APPROVED' && (
+            {selectedDoc && canTransmit && !documentTransmitted && dossier.status !== 'CLOSED' && (
               <button
-                onClick={() => setTransmitModalOpen(true)}
-                className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
+                onClick={() => setTransmitOpen(true)}
+                disabled={busy}
+                className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50"
               >
                 <Send size={14} />
                 <span>Transmit Outgoing Record</span>
               </button>
             )}
 
-            {/* Step 6: Final Archival */}
-            {doc.status === 'TRANSMITTED' && (
+            {canClose && dossier.status !== 'CLOSED' && (
               <button
-                onClick={handleCloseAndArchive}
-                className="btn-fluid px-3 py-1.5 bg-[#475569] hover:bg-[#334155] text-white rounded text-xs font-bold cursor-pointer shadow-sm"
+                onClick={openClosePanel}
+                disabled={busy}
+                className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#475569] hover:bg-[#334155] text-white rounded text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50"
               >
-                Close & Archive Docket
+                <Archive size={14} />
+                <span>Close & Archive Request</span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Real Full Attachment Viewer Modal */}
-      {viewingAttachment && (
-        <div
-          className="fixed inset-0 bg-black/85 z-70 flex items-center justify-center p-4 animate-fluid-fade"
-          onClick={() => setViewingAttachment(null)}
-        >
-          <div
-            className="relative max-w-4xl w-full max-h-[92vh] bg-white rounded-lg overflow-hidden shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-[#081E36] text-white px-5 py-3 flex items-center justify-between text-xs font-bold border-b border-[#15803D]">
-              <div className="flex items-center gap-2 truncate">
-                <FileText size={16} />
-                <span className="truncate">{viewingAttachment.fileName}</span>
-                <span className="text-[10px] text-[#CBD5E1]">({viewingAttachment.fileSize})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {viewingAttachment.fileDataUrl && (
-                  <a
-                    href={viewingAttachment.fileDataUrl}
-                    download={viewingAttachment.fileName}
-                    className="p-1 text-white/80 hover:text-white"
-                    title="Download File"
-                  >
-                    <Download size={16} />
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setViewingAttachment(null)}
-                  className="text-white/80 hover:text-white p-1"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 overflow-auto flex-1 flex items-center justify-center bg-[#F1F5F9] min-h-[400px]">
-              {viewingAttachment.fileDataUrl?.startsWith('data:application/pdf') ? (
-                <iframe
-                  src={viewingAttachment.fileDataUrl}
-                  title={viewingAttachment.fileName}
-                  className="w-full h-[650px] border-0 rounded bg-white shadow"
-                />
-              ) : viewingAttachment.fileDataUrl?.startsWith('data:image/') ? (
-                <img
-                  src={viewingAttachment.fileDataUrl}
-                  alt={viewingAttachment.fileName}
-                  className="max-h-[80vh] w-auto object-contain rounded shadow"
-                />
-              ) : (
-                <div className="text-center p-8 space-y-3">
-                  <FileText size={48} className="mx-auto text-[#081E36]" />
-                  <div className="text-sm font-bold text-[#0F172A]">{viewingAttachment.fileName}</div>
-                  <p className="text-xs text-[#64748B]">
-                    File type ({viewingAttachment.fileType}) can be downloaded for local inspection.
-                  </p>
-                  {viewingAttachment.fileDataUrl && (
-                    <a
-                      href={viewingAttachment.fileDataUrl}
-                      download={viewingAttachment.fileName}
-                      className="btn-fluid px-4 py-2 bg-[#081E36] text-white rounded text-xs font-bold inline-flex items-center gap-1.5"
-                    >
-                      <Download size={14} />
-                      <span>Download File</span>
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Formal Return / Denial Grounds Sub-modal */}
-      {denialModalOpen && (
+      {/* Formal Return / Denial Grounds */}
+      {denialOpen && (
         <div className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-5 max-w-md w-full shadow-2xl border border-[#334155]">
             <h3 className="font-bold text-sm text-[#0F172A] mb-2 uppercase">
               Formal Administrative Return or Denial
             </h3>
             <p className="text-xs text-[#64748B] mb-3">
-              Per RA 11032 statutory rules, specify the clear legal or procedural reason for returning or rejecting this document.
+              Per RA 11032 statutory rules, specify the clear legal or procedural reason for
+              returning or rejecting this document.
             </p>
             <textarea
-              value={denialReasonText}
-              onChange={(e) => setDenialReasonText(e.target.value)}
+              value={denialReason}
+              onChange={(e) => setDenialReason(e.target.value)}
               placeholder="e.g. Returned for lack of signed endorsement from the Municipal Budget Officer."
               rows={4}
               className="w-full p-2.5 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#334155] mb-4"
             />
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setDenialModalOpen(false)}
+                onClick={() => setDenialOpen(false)}
                 className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDenySubmit}
-                className="btn-fluid px-3.5 py-1.5 bg-[#334155] hover:bg-[#1E293B] text-white rounded text-xs font-bold cursor-pointer"
+                onClick={() => runReview('DENIED', denialReason)}
+                disabled={busy || !denialReason.trim()}
+                className="btn-fluid px-3.5 py-1.5 bg-[#334155] hover:bg-[#1E293B] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50"
               >
                 Submit Formal Return
               </button>
@@ -985,8 +813,8 @@ export default function DocumentDetailModal({
         </div>
       )}
 
-      {/* Outgoing Transmission Recipient Sub-modal with Real Proof Upload */}
-      {transmitModalOpen && (
+      {/* Outgoing Transmission */}
+      {transmitOpen && (
         <div className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-5 max-w-md w-full shadow-2xl border border-[#0284C7]">
             <h3 className="font-bold text-sm text-[#0369A1] mb-2 uppercase">
@@ -999,8 +827,8 @@ export default function DocumentDetailModal({
                 </label>
                 <input
                   type="text"
-                  value={transmitRecipient}
-                  onChange={(e) => setTransmitRecipient(e.target.value)}
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
                   placeholder="e.g. Engr. Roberto Santos"
                   className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#0284C7]"
                 />
@@ -1011,41 +839,50 @@ export default function DocumentDetailModal({
                 </label>
                 <input
                   type="text"
-                  value={transmitOffice}
-                  onChange={(e) => setTransmitOffice(e.target.value)}
+                  value={receivingOffice}
+                  onChange={(e) => setReceivingOffice(e.target.value)}
                   placeholder="e.g. Municipal Engineering Office"
                   className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#0284C7]"
                 />
               </div>
-
               <div>
                 <label className="block text-[11px] font-bold text-[#64748B] mb-1">
-                  Upload Signed Delivery Receipt / Proof Photo
+                  Receiving Officer (Physical) *
                 </label>
                 <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={handleProofFileUpload}
-                  className="w-full text-xs text-[#64748B] file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#0284C7] file:text-white hover:file:bg-[#0369A1] cursor-pointer"
+                  type="text"
+                  value={receivedBy}
+                  onChange={(e) => setReceivedBy(e.target.value)}
+                  placeholder="e.g. Ms. Ana Reyes"
+                  className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#0284C7]"
                 />
-                {transmitProofUrl && (
-                  <div className="mt-1 text-[10px] text-[#15803D] font-bold flex items-center gap-1">
-                    <CheckCircle2 size={12} />
-                    <span>Proof of delivery document attached successfully</span>
-                  </div>
-                )}
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
+                  Transmission Method
+                </label>
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value as TransmissionMethod)}
+                  className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#0284C7] bg-white"
+                >
+                  <option value="PICKUP">Pick-up</option>
+                  <option value="COURIER">Courier</option>
+                  <option value="EMAIL">Email</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setTransmitModalOpen(false)}
+                onClick={() => setTransmitOpen(false)}
                 className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={handleTransmitSubmit}
-                className="btn-fluid px-3.5 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-bold cursor-pointer"
+                onClick={runTransmit}
+                disabled={busy || !recipientName.trim() || !receivingOffice.trim() || !receivedBy.trim()}
+                className="btn-fluid px-3.5 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50"
               >
                 Log Physical Transmittal
               </button>
@@ -1054,214 +891,126 @@ export default function DocumentDetailModal({
         </div>
       )}
 
-      {/* Active Attachment & Scanner Drawer Sub-Modal */}
-      {attachModalOpen && (
-        <div
-          className="fixed inset-0 bg-[#081E36]/80 z-60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fluid-fade"
-          onClick={() => setAttachModalOpen(false)}
-        >
-          <div
-            className="bg-white rounded-lg w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-[#081E36] overflow-hidden animate-fluid-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Sub-modal Header */}
-            <div className="bg-[#081E36] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#15803D]">
-              <div>
-                <span className="font-bold text-xs uppercase tracking-wider text-[#FCD116] block">
-                  Official Record Annexation
-                </span>
-                <h3 className="font-cinzel text-sm font-bold text-white">
-                  Attach Documents, Scans, or Annexes to {doc.controlNumber}
-                </h3>
+      {/* Step 6: Close & Archive */}
+      {closeOpen && (
+        <div className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-5 max-w-md w-full shadow-2xl border border-[#475569]">
+            <div className="flex items-center gap-2 mb-2">
+              <FolderOpen size={16} className="text-[#081E36]" />
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase">
+                Close & Archive Request (Step 6)
+              </h3>
+            </div>
+            <p className="text-xs text-[#64748B] mb-4">
+              Upload the signed final copy and file the request into the archive. Closing marks the
+              dossier read-only.
+            </p>
+
+            {closeError && (
+              <div className="p-3 mb-4 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold">
+                {closeError}
               </div>
-              <button
-                type="button"
-                onClick={() => setAttachModalOpen(false)}
-                className="text-white/80 hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
+            )}
 
-            {/* Mode Switcher Tabs */}
-            <div className="flex border-b border-[#CBD5E1] bg-[#F1F5F9] px-5 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setAttachMode('upload')}
-                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
-                  attachMode === 'upload'
-                    ? 'border-[#15803D] text-[#15803D] bg-white'
-                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-                }`}
-              >
-                <Upload size={13} />
-                <span>Upload File (Computer / Feeder)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttachMode('scanner')}
-                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
-                  attachMode === 'scanner'
-                    ? 'border-[#15803D] text-[#15803D] bg-white'
-                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-                }`}
-              >
-                <Camera size={13} />
-                <span>Camera / Hardware Scanner</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttachMode('link')}
-                className={`py-2 px-3 border-b-2 cursor-pointer transition-colors inline-flex items-center gap-1.5 ${
-                  attachMode === 'link'
-                    ? 'border-[#15803D] text-[#15803D] bg-white'
-                    : 'border-transparent text-[#64748B] hover:text-[#081E36]'
-                }`}
-              >
-                <LinkIcon size={13} />
-                <span>Cross-Reference Docket</span>
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
-              {/* MODE 1: FILE UPLOAD */}
-              {attachMode === 'upload' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
-                      Select File to Attach (PDF, Word DOCX/DOC, Images) *
-                    </label>
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                      onChange={handleFileSelected}
-                      className="w-full text-xs text-[#081E36] file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#081E36] file:text-white hover:file:bg-[#0B2545] cursor-pointer border border-[#CBD5E1] rounded p-1.5 bg-[#F8FAFC]"
-                    />
-                  </div>
-
-                  {uploadFileName && (
-                    <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded flex items-center justify-between text-xs animate-fluid-fade">
-                      <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-[#15803D]" />
-                        <div>
-                          <strong className="text-[#166534] block">{uploadFileName}</strong>
-                          <span className="text-[10px] text-[#15803D]">
-                            Size: {uploadFileSize} | Ready for official docket annexation
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold uppercase bg-[#DCFCE7] text-[#166534] px-2 py-0.5 rounded border border-[#86EFAC]">
-                        Selected
-                      </span>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
-                      Official Annex Description / Document Label (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={uploadFileLabel}
-                      onChange={(e) => setUploadFileLabel(e.target.value)}
-                      placeholder="e.g. Annex A - Certified Barangay Council Resolution"
-                      className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#15803D]"
-                    />
-                    <span className="text-[10px] text-[#64748B] mt-0.5 block">
-                      Helps executive reviewers immediately identify the attached record in the docket.
+            <div className="space-y-3 mb-4 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
+                  Signed final copy (SIGNED_FINAL) *
+                </label>
+                {existingSignedFinal && (
+                  <div className="mb-1.5 text-[10px] text-[#15803D] font-semibold inline-flex items-center gap-1">
+                    <Paperclip size={11} />
+                    <span className="truncate max-w-[16rem]">
+                      On file: {existingSignedFinal.att.originalName} ({existingSignedFinal.doc.controlNo})
                     </span>
                   </div>
-
-                  <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAttachModalOpen(false)}
-                      className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveUploadAttachment}
-                      disabled={!uploadFileDataUrl}
-                      className={`btn-fluid px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm inline-flex items-center gap-1.5 ${
-                        uploadFileDataUrl
-                          ? 'bg-[#15803D] hover:bg-[#166534] cursor-pointer'
-                          : 'bg-[#94A3B8] cursor-not-allowed opacity-60'
-                      }`}
-                    >
-                      <Plus size={14} />
-                      <span>Save and Attach to Docket</span>
-                    </button>
+                )}
+                {finalAttachmentId && (
+                  <div className="mb-1.5 text-[10px] text-[#15803D] font-semibold inline-flex items-center gap-1">
+                    <Paperclip size={11} />
+                    <span>New signed final copy uploaded and ready to file.</span>
                   </div>
-                </div>
-              )}
+                )}
+                {canUpload ? (
+                  <label
+                    className="btn-fluid inline-flex items-center gap-1 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-[11px] font-semibold cursor-pointer shadow-xs transition-colors"
+                    title="Upload the signed final copy (PDF or image)"
+                  >
+                    {uploadFinalAction.isPending ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Upload size={12} />
+                    )}
+                    <span>Upload signed final copy</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      className="hidden"
+                      disabled={uploadFinalAction.isPending}
+                      onChange={handleSignedFinalFile}
+                    />
+                  </label>
+                ) : (
+                  <span className="text-[10px] font-semibold text-[#64748B]">
+                    Upload not permitted for your account.
+                  </span>
+                )}
+              </div>
 
-              {/* MODE 2: CAMERA / HARDWARE SCANNER */}
-              {attachMode === 'scanner' && (
-                <div className="space-y-3">
-                  <p className="text-[11px] text-[#64748B]">
-                    Use your workstation camera or hardware scanner to digitize paper receipts, wet signatures, or citizen petitions directly into this docket.
-                  </p>
-                  <DocumentScanner
-                    currentUserFullName={currentUser.fullName}
-                    onScanComplete={handleScannerAnnexesComplete}
-                  />
-                </div>
-              )}
-
-              {/* MODE 3: CROSS-REFERENCE DOCKET */}
-              {attachMode === 'link' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#081E36] mb-1">
-                      Select Existing Docket to Cross-Reference *
-                    </label>
-                    <select
-                      value={linkDocId}
-                      onChange={(e) => setLinkDocId(e.target.value)}
-                      className="w-full p-2.5 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#15803D] text-xs bg-white"
-                    >
-                      <option value="">-- Choose an official docket from registry --</option>
-                      {documents
-                        .filter((d) => d.id !== doc.id)
-                        .map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.controlNumber} - {d.title} ({d.requestingParty})
-                          </option>
-                        ))}
-                    </select>
+              <div>
+                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
+                  Archive folder
+                </label>
+                {loadFoldersAction.isPending ? (
+                  <div className="text-[10px] text-[#64748B] inline-flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin" />
+                    <span>Loading archive folders...</span>
                   </div>
+                ) : (
+                  <select
+                    value={folderId}
+                    onChange={(e) => setFolderId(e.target.value)}
+                    className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#475569] bg-white text-[#0F172A]"
+                  >
+                    <option value="">Unfiled (archive root)</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.path}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
-                  <div className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded text-[#64748B] text-[11px] leading-relaxed">
-                    Cross-referencing attaches a formal reference link between this document and an existing docket in the municipal archives without duplicating physical storage.
-                  </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
+                  Closing notes (optional)
+                </label>
+                <textarea
+                  value={closeNotes}
+                  onChange={(e) => setCloseNotes(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Concluded; signed final copy filed for permanent retention."
+                  className="w-full p-2.5 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#475569]"
+                />
+              </div>
+            </div>
 
-                  <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAttachModalOpen(false)}
-                      className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLinkExistingDocket}
-                      disabled={!linkDocId}
-                      className={`btn-fluid px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm inline-flex items-center gap-1.5 ${
-                        linkDocId
-                          ? 'bg-[#081E36] hover:bg-[#0B2545] cursor-pointer'
-                          : 'bg-[#94A3B8] cursor-not-allowed opacity-60'
-                      }`}
-                    >
-                      <LinkIcon size={14} />
-                      <span>Link as Reference Annex</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setCloseOpen(false)}
+                className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runClose}
+                disabled={busy}
+                className="btn-fluid px-3.5 py-1.5 bg-[#475569] hover:bg-[#334155] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
+                <span>Close & Archive</span>
+              </button>
             </div>
           </div>
         </div>

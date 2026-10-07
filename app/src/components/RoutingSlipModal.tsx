@@ -2,15 +2,18 @@
 
 import Image from 'next/image';
 import { X, Printer } from 'lucide-react';
-import { DocumentRecord } from '@/lib/types';
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS } from '@/lib/data';
+import { DOCUMENT_STATUS_META, REQUEST_PRIORITY_LABELS } from '@/lib/constants';
+import type { Request } from '@/services/contracts/models';
 
 interface RoutingSlipModalProps {
-  document: DocumentRecord;
+  request: Request;
   onClose: () => void;
 }
 
-export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlipModalProps) {
+export default function RoutingSlipModal({ request, onClose }: RoutingSlipModalProps) {
+  const documents = request.documents ?? [];
+  const priorityLabel = REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority;
+
   const handlePrint = () => {
     window.print();
   };
@@ -94,31 +97,35 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
                   Control Number:
                 </td>
                 <td className="border border-black p-2 font-mono font-bold text-[#081E36]">
-                  {doc.controlNumber}
+                  {request.controlNo}
                 </td>
               </tr>
               <tr>
                 <td className="border border-black p-2 bg-[#F1F5F9] font-bold text-[11px] uppercase">
                   Subject Matter:
                 </td>
-                <td className="border border-black p-2 font-semibold">
-                  {doc.title}
-                </td>
+                <td className="border border-black p-2 font-semibold">{request.title}</td>
               </tr>
               <tr>
                 <td className="border border-black p-2 bg-[#F1F5F9] font-bold text-[11px] uppercase">
                   Originating Office / Party:
                 </td>
                 <td className="border border-black p-2">
-                  {doc.originOffice} ({doc.requestingParty})
+                  {request.originOffice} ({request.requestingParty})
                 </td>
+              </tr>
+              <tr>
+                <td className="border border-black p-2 bg-[#F1F5F9] font-bold text-[11px] uppercase">
+                  Priority:
+                </td>
+                <td className="border border-black p-2 font-semibold">{priorityLabel}</td>
               </tr>
               <tr>
                 <td className="border border-black p-2 bg-[#F1F5F9] font-bold text-[11px] uppercase">
                   Date & Time Received:
                 </td>
                 <td className="border border-black p-2 font-mono">
-                  {new Date(doc.dateReceived).toLocaleString('en-PH')}
+                  {new Date(request.receivedAt).toLocaleString('en-PH')}
                 </td>
               </tr>
               <tr>
@@ -126,11 +133,45 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
                   RA 11032 SLA Processing Target:
                 </td>
                 <td className="border border-black p-2 font-bold text-[#15803D]">
-                  3 Working Days (Due: {new Date(doc.slaDeadline).toLocaleDateString('en-PH')})
+                  3 Working Days (Due:{' '}
+                  {new Date(request.slaDeadline).toLocaleDateString('en-PH')})
                 </td>
               </tr>
             </tbody>
           </table>
+
+          {/* Linked Documents */}
+          <div className="border border-black p-3 mb-4 font-sans">
+            <div className="font-bold text-[11px] uppercase mb-2 text-[#081E36]">
+              Linked Issuances & Documents ({documents.length}):
+            </div>
+            {documents.length === 0 ? (
+              <p className="text-[11px] italic text-[#64748B]">
+                No output documents are linked to this request.
+              </p>
+            ) : (
+              <table className="w-full border-collapse border border-black text-[11px]">
+                <thead>
+                  <tr className="bg-[#F1F5F9]">
+                    <th className="border border-black p-1.5 text-left uppercase">Control No.</th>
+                    <th className="border border-black p-1.5 text-left uppercase">Title</th>
+                    <th className="border border-black p-1.5 text-left uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id}>
+                      <td className="border border-black p-1.5 font-mono">{doc.controlNo}</td>
+                      <td className="border border-black p-1.5">{doc.title}</td>
+                      <td className="border border-black p-1.5">
+                        {DOCUMENT_STATUS_META[doc.status]?.label ?? doc.status}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
 
           {/* Action Directives Checkbox Grid */}
           <div className="border border-black p-3 mb-4 font-sans">
@@ -171,8 +212,8 @@ export default function RoutingSlipModal({ document: doc, onClose }: RoutingSlip
               Remarks / Specific Instructions:
             </div>
             <p className="italic text-xs">
-              {doc.endorsementNotes ||
-                'Please evaluate compliance with municipal ordinances and report status within statutory SLA.'}
+              Please evaluate compliance with municipal ordinances and report status within
+              statutory SLA.
             </p>
           </div>
 

@@ -6,33 +6,50 @@ import {
   Upload,
   RefreshCw,
   Trash2,
-  CheckCircle2,
   FileText,
   Eye,
   X,
   Plus,
   AlertCircle,
   FileCheck,
-  Maximize2,
 } from 'lucide-react';
-import { Attachment } from '@/lib/types';
 
 interface DocumentScannerProps {
-  onScanComplete: (pages: string[], attachments: Attachment[]) => void;
-  initialPages?: string[];
-  initialAttachments?: Attachment[];
-  currentUserFullName: string;
+  /** Emits the captured and uploaded files so a caller can upload them. */
+  onCapture: (files: File[]) => void;
 }
 
-export default function DocumentScanner({
-  onScanComplete,
-  initialPages = [],
-  initialAttachments = [],
-  currentUserFullName,
-}: DocumentScannerProps) {
+interface ScannedItem {
+  id: string;
+  file: File;
+  name: string;
+  size: string;
+  type: string;
+  /** Data URL preview for image captures; null for non-image uploads. */
+  previewUrl: string | null;
+}
+
+function formatFileSize(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [meta, base64] = dataUrl.split(',');
+  const mimeMatch = /:(.*?);/.exec(meta);
+  const mime = mimeMatch?.[1] ?? 'image/jpeg';
+  const binary = atob(base64 ?? '');
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File([bytes], fileName, { type: mime });
+}
+
+export default function DocumentScanner({ onCapture }: DocumentScannerProps) {
   const [mode, setMode] = useState<'upload' | 'camera'>('upload');
-  const [scannedPages, setScannedPages] = useState<string[]>(initialPages);
-  const [attachments, setAttachments] = useState<Attachment[]>(initialAttachments);
+  const [items, setItems] = useState<ScannedItem[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
@@ -42,15 +59,25 @@ export default function DocumentScanner({
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sync back to parent whenever state changes
+  // Sync the captured files back to the parent whenever the set changes.
   useEffect(() => {
-    onScanComplete(scannedPages, attachments);
-  }, [scannedPages, attachments]);
+    onCapture(items.map((item) => item.file));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
-  // Clean up camera stream on unmount or mode switch
+  // Clean up camera stream on unmount (mutating the refs directly here keeps
+  // the effect self-contained for the react-hooks/immutability rule).
   useEffect(() => {
+    const stream = streamRef;
+    const video = videoRef;
     return () => {
-      stopCamera();
+      if (stream.current) {
+        stream.current.getTracks().forEach((track) => track.stop());
+        stream.current = null;
+      }
+      if (video.current) {
+        video.current.srcObject = null;
+      }
     };
   }, []);
 
@@ -73,16 +100,18 @@ export default function DocumentScanner({
         videoRef.current.play();
       }
       setIsCameraActive(true);
-    } catch (err: any) {
+    } catch (err) {
       console.warn('[DocSys Scanner] Camera initialization error:', err);
       setCameraError(
-        err.message || 'Unable to access video camera. Please use Direct File Feeder upload.'
+        err instanceof Error
+          ? err.message
+          : 'Unable to access video camera. Please use Direct File Feeder upload.'
       );
       setIsCameraActive(false);
     }
   };
 
-  const stopCamera = () => {
+  function stopCamera() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -91,7 +120,7 @@ export default function DocumentScanner({
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
-  };
+  }
 
   const switchMode = (newMode: 'upload' | 'camera') => {
     if (newMode === 'upload') {
@@ -100,6 +129,10 @@ export default function DocumentScanner({
       startCamera();
     }
     setMode(newMode);
+  };
+
+  const addItem = (item: ScannedItem) => {
+    setItems((prev) => [...prev, item]);
   };
 
   const captureFrame = () => {
@@ -113,67 +146,52 @@ export default function DocumentScanner({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Draw the high-resolution frame
+    // Draw the high-resolution frame and encode it as a compressed JPEG.
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Convert to authentic compressed JPEG Data URL
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    setScannedPages((prev) => [...prev, dataUrl]);
+    const fileName = `SCANNED_PAGE_${items.length + 1}.jpg`;
+    const file = dataUrlToFile(dataUrl, fileName);
 
-    // Also record as digital attachment
-    const newAtt: Attachment = {
-      id: `att-scan-${Date.now()}-${scannedPages.length + 1}`,
-      fileName: `SCANNED_PAGE_${scannedPages.length + 1}.jpg`,
-      fileSize: `${Math.round(dataUrl.length * 0.75 / 1024)} KB`,
-      fileType: 'image/jpeg',
-      uploadedBy: currentUserFullName,
-      uploadedAt: new Date().toISOString(),
-      fileDataUrl: dataUrl,
-    };
-    setAttachments((prev) => [...prev, newAtt]);
+    addItem({
+      id: `scan-${Date.now()}-${items.length + 1}`,
+      file,
+      name: fileName,
+      size: formatFileSize(file.size),
+      type: 'image/jpeg',
+      previewUrl: dataUrl,
+    });
   };
 
   const handleFileUpload = (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      const fileSizeStr =
-        file.size < 1024 * 1024
-          ? `${(file.size / 1024).toFixed(1)} KB`
-          : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        const newAtt: Attachment = {
-          id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          fileName: file.name,
-          fileSize: fileSizeStr,
-          fileType: file.type || 'application/octet-stream',
-          uploadedBy: currentUserFullName,
-          uploadedAt: new Date().toISOString(),
-          fileDataUrl: result,
-        };
-
-        setAttachments((prev) => [...prev, newAtt]);
-
-        // If it's an image, also push to scannedPages for inline page flip preview
-        if (file.type.startsWith('image/')) {
-          setScannedPages((prev) => [...prev, result]);
-        }
+    Array.from(files).forEach((file, index) => {
+      const id = `file-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
+      const base = {
+        id,
+        file,
+        name: file.name,
+        size: formatFileSize(file.size),
+        type: file.type || 'application/octet-stream',
       };
 
-      reader.readAsDataURL(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          addItem({ ...base, previewUrl: (event.target?.result as string) ?? null });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        addItem({ ...base, previewUrl: null });
+      }
     });
   };
 
-  const removePage = (index: number) => {
-    setScannedPages((prev) => prev.filter((_, i) => i !== index));
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const removeAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  };
+  const imageItems = items.filter((item) => item.previewUrl !== null);
 
   return (
     <div className="space-y-4">
@@ -236,10 +254,11 @@ export default function DocumentScanner({
 
           <Upload size={32} className="mx-auto text-[#081E36] mb-2" />
           <h4 className="font-bold text-xs text-[#081E36]">
-            Upload Scanned Official Dossier & Supporting Annexes
+            Upload Scanned Official Dossier &amp; Supporting Annexes
           </h4>
           <p className="text-[11px] text-[#64748B] mb-3 max-w-md mx-auto">
-            Drag and drop authentic municipal documents, signed letters, travel orders, or camera photos. Supports PDF, JPG, PNG, and DOCX.
+            Drag and drop authentic municipal documents, signed letters, travel orders, or camera
+            photos. Supports PDF, JPG, PNG, and DOCX.
           </p>
 
           <button
@@ -303,7 +322,7 @@ export default function DocumentScanner({
                   className="btn-fluid flex items-center gap-2 px-5 py-2 bg-[#15803D] hover:bg-[#166534] text-white rounded-full font-bold text-xs shadow-lg cursor-pointer disabled:opacity-50"
                 >
                   <Camera size={16} />
-                  <span>Capture Page {scannedPages.length + 1}</span>
+                  <span>Capture Page {imageItems.length + 1}</span>
                 </button>
                 <button
                   type="button"
@@ -320,26 +339,26 @@ export default function DocumentScanner({
       )}
 
       {/* Captured Pages Gallery (Multi-Page Support) */}
-      {scannedPages.length > 0 && (
+      {imageItems.length > 0 && (
         <div className="p-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-[#081E36] uppercase tracking-wide flex items-center gap-1.5">
               <FileCheck size={14} className="text-[#15803D]" />
-              Captured Document Pages ({scannedPages.length})
+              Captured Document Pages ({imageItems.length})
             </span>
             <span className="text-[10px] text-[#64748B]">
-              Ready for archival & executive docketing
+              Ready for archival &amp; executive docketing
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {scannedPages.map((pageUrl, idx) => (
+            {imageItems.map((item, idx) => (
               <div
-                key={idx}
+                key={item.id}
                 className="relative group border border-[#CBD5E1] rounded bg-white overflow-hidden aspect-[3/4] flex flex-col"
               >
                 <img
-                  src={pageUrl}
+                  src={item.previewUrl ?? ''}
                   alt={`Page ${idx + 1}`}
                   className="w-full h-full object-cover"
                 />
@@ -349,7 +368,7 @@ export default function DocumentScanner({
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPreviewModalUrl(pageUrl)}
+                    onClick={() => setPreviewModalUrl(item.previewUrl)}
                     className="p-1.5 bg-white text-[#081E36] rounded-full hover:bg-[#F1F5F9] cursor-pointer"
                     title="View Full Size"
                   >
@@ -357,7 +376,7 @@ export default function DocumentScanner({
                   </button>
                   <button
                     type="button"
-                    onClick={() => removePage(idx)}
+                    onClick={() => removeItem(item.id)}
                     className="p-1.5 bg-white text-[#334155] rounded-full hover:bg-[#F1F5F9] cursor-pointer"
                     title="Remove Page"
                   >
@@ -370,35 +389,35 @@ export default function DocumentScanner({
         </div>
       )}
 
-      {/* Real Uploaded Attachments List */}
-      {attachments.length > 0 && (
+      {/* Captured / Uploaded Attachments List */}
+      {items.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-[11px] font-bold text-[#081E36] uppercase tracking-wide">
-            Digital Annexes & Physical File Records ({attachments.length})
+            Digital Annexes &amp; Physical File Records ({items.length})
           </div>
           <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0] bg-white text-xs">
-            {attachments.map((att) => (
+            {items.map((item) => (
               <div
-                key={att.id}
+                key={item.id}
                 className="p-2.5 flex items-center justify-between hover:bg-[#F8FAFC]"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText size={16} className="text-[#081E36] shrink-0" />
                   <div className="min-w-0">
                     <div className="font-semibold text-xs text-[#0F172A] truncate">
-                      {att.fileName}
+                      {item.name}
                     </div>
                     <div className="text-[10px] text-[#64748B]">
-                      {att.fileSize} - {att.fileType} - Uploaded by {att.uploadedBy}
+                      {item.size} - {item.type}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {att.fileDataUrl && (
+                  {item.previewUrl && (
                     <button
                       type="button"
-                      onClick={() => setPreviewModalUrl(att.fileDataUrl || null)}
+                      onClick={() => setPreviewModalUrl(item.previewUrl)}
                       className="px-2 py-1 text-[11px] font-bold text-[#081E36] hover:bg-[#E2E8F0] rounded cursor-pointer"
                     >
                       Preview
@@ -406,7 +425,7 @@ export default function DocumentScanner({
                   )}
                   <button
                     type="button"
-                    onClick={() => removeAttachment(att.id)}
+                    onClick={() => removeItem(item.id)}
                     className="text-[#64748B] hover:text-[#0F172A] p-1 cursor-pointer"
                     title="Remove File"
                   >
