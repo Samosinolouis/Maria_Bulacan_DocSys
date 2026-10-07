@@ -76,6 +76,25 @@ input UpdateUserProfileInput {
   position: String
 }
 
+input CreateUserInput {
+  firstName: String!
+  middleName: String
+  lastName: String!
+  suffix: String
+  email: String!
+  contactNo: String!
+  office: String!
+  position: String!
+  """Realm roles granted at provisioning time; each id must already exist."""
+  roleIds: [ID!]
+  """
+  Optional one-time credential. Keycloak stores it as a temporary password, so
+  the holder is forced to replace it at first sign-in; it is never persisted by
+  this application (NFR-05).
+  """
+  temporaryPassword: String
+}
+
 input AssignRoleInput {
   userId: ID!
   roleId: ID!
@@ -104,6 +123,15 @@ extend type Query {
 # --- Mutations ---
 
 extend type Mutation {
+  """
+  Provision a new plantilla account in the identity provider and mirror it as a
+  shadow user. Action: UserService:Create (FR-01, FR-02).
+  """
+  createUser(input: CreateUserInput!): UserMutationPayload!
+  """
+  Update a profile. The account holder may always edit their own record;
+  editing somebody else's requires UserService:Update (FR-03).
+  """
   updateUserProfile(id: ID!, input: UpdateUserProfileInput!): UserMutationPayload!
   """Soft deactivation - users are never deleted (FR-03)."""
   deactivateUser(id: ID!): UserMutationPayload!

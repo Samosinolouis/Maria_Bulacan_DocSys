@@ -17,6 +17,8 @@ import { and, asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import { users } from "../../db/schema/index.js";
 import {
+  AppError,
+  CommonErrorCode,
   ConflictError,
   InvalidStateError,
   NotFoundError,
@@ -31,6 +33,7 @@ import type {
 import type { ICachePort } from "../../infrastructure/cache/cache.interface.js";
 import type {
   IUserService,
+  CreateUserInput,
   ProvisionUserInput,
   UpdateUserProfileInput,
   UserFilter,
@@ -52,6 +55,9 @@ import {
 import { assertPermission } from "../shared/authz.js";
 
 const USER_CACHE_TTL_SECONDS = 60;
+
+/** Deliberately permissive: the identity provider is the authority on email. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class UserService implements IUserService {
   constructor(
@@ -182,30 +188,155 @@ export class UserService implements IUserService {
     });
   }
 
+  /**
+   * Provision a brand-new plantilla account (FR-01, FR-02, FR-04).
+   *
+   * Order matters: authorize and resolve the initial roles FIRST, create the
+   * account in Keycloak SECOND (it owns the credential and mints the OIDC
+   * "sub" that keys the shadow row), and mirror the row plus its grants THIRD.
+   * A Keycloak failure therefore aborts before any database write, and a
+   * database failure leaves at worst an orphaned provider account - the same
+   * reconciliation path `deactivate` already relies on.
+   */
+  async create(actorId: string, input: CreateUserInput): Promise<UserRecord> {
+    const started = Date.now();
+
+    const firstName = input.firstName?.trim();
+    const lastName = input.lastName?.trim();
+    const email = input.email?.trim().toLowerCase();
+    const contactNo = input.contactNo?.trim();
+    const office = input.office?.trim();
+    const position = input.position?.trim();
+
+    if (!firstName) throw new ValidationError("First name is required.");
+    if (!lastName) throw new ValidationError("Last name is required.");
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      throw new ValidationError("A valid email address is required.");
+    }
+    if (!contactNo) throw new ValidationError("Contact number is required.");
+    if (!office) throw new ValidationError("Office is required.");
+    if (!position) throw new ValidationError("Position is required.");
+
+    const roles = await this.db.query(async (uow) => {
+      await assertPermission(uow, actorId, "UserService:Create");
+
+      const existing = await uow.users.findByEmail(email);
+      if (existing) throw new ConflictError(`User '${email}'`);
+
+      const resolved: RoleRecord[] = [];
+      for (const roleId of new Set(input.roleIds ?? [])) {
+        const role = await uow.roles.findById(roleId);
+        if (!role) throw new NotFoundError("Role", roleId);
+        resolved.push(role);
+      }
+      return resolved;
+    });
+
+    // The credential lives only in Keycloak (NFR-05). When no one-time
+    // password is supplied the account is created without one and the holder
+    // must be sent through the realm's reset-password flow.
+    const idpResult = await this.idp.createUser({
+      email,
+      username: email,
+      firstName,
+      lastName,
+      ...(input.temporaryPassword ? { password: input.temporaryPassword } : {}),
+    });
+
+    if (!idpResult.success || !idpResult.userId) {
+      this.telemetry.trackError(
+        new Error(idpResult.error ?? "Identity provider rejected the account request."),
+        { operation: "user.create", email },
+      );
+      throw new AppError("The identity provider rejected the account request.", {
+        status: 502,
+        code: CommonErrorCode.INTERNAL_ERROR,
+      });
+    }
+
+    const userId = idpResult.userId;
+
+    const created = await this.db.transaction(async (uow) => {
+      // Re-check inside the transaction: two concurrent creates can both pass
+      // the pre-flight check while Keycloak is provisioning.
+      const clash = await uow.users.findByEmail(email);
+      if (clash) throw new ConflictError(`User '${email}'`);
+
+      const record = await uow.users.create({
+        id: userId,
+        firstName,
+        middleName: input.middleName?.trim() || null,
+        lastName,
+        suffix: input.suffix?.trim() || null,
+        email,
+        contactNo,
+        office,
+        position,
+      });
+
+      for (const role of roles) {
+        await uow.roles.assign({ userId, roleId: role.id, assignedBy: actorId });
+      }
+
+      return record;
+    });
+
+    // Realm role mappings are a non-transactional side effect (FR-04).
+    for (const role of roles) {
+      await this.safeIdpCall(() => this.idp.addRole(userId, role.name), "user.addRole", userId);
+    }
+
+    this.telemetry.trackEvent("user.created", {
+      userId: created.id,
+      roleIds: roles.map((role) => role.id),
+    });
+    this.telemetry.trackPerformance("user.create", Date.now() - started);
+    await this.cache.delete(`v1:user:get:${userId}`);
+    return created;
+  }
+
+  /**
+   * Update a profile. The account holder may always edit their own record;
+   * editing somebody else's is an administrative act and requires
+   * `UserService:Update` (FR-03).
+   */
   async updateProfile(
     actorId: string,
     id: string,
     input: UpdateUserProfileInput,
   ): Promise<UserRecord> {
+    const isSelf = actorId === id;
+
     return this.db.transaction(async (uow) => {
-      await assertPermission(uow, actorId, "UserService:Update");
+      if (!isSelf) {
+        await assertPermission(uow, actorId, "UserService:Update");
+      }
 
       const user = await uow.users.findById(id);
       if (!user) throw new NotFoundError("User", id);
 
-      if (input.email != null && !input.email.trim()) {
-        throw new ValidationError("Email cannot be empty.");
-      }
+      // `undefined` means "not supplied, leave alone"; an explicit null or an
+      // empty string means "clear". A plain `value || undefined` would silently
+      // refuse to clear a field, which is exactly what an account holder does
+      // when they remove a contact number.
+      const text = (value: string | null | undefined): string | undefined =>
+        value === undefined ? undefined : (value ?? "").trim();
+      const nullable = (value: string | null | undefined): string | null | undefined =>
+        value === undefined ? undefined : (value ?? "").trim() || null;
+
+      if (text(input.firstName) === "") throw new ValidationError("First name cannot be empty.");
+      if (text(input.lastName) === "") throw new ValidationError("Last name cannot be empty.");
+      if (text(input.email) === "") throw new ValidationError("Email cannot be empty.");
 
       const updated = await uow.users.update(id, {
-        firstName: input.firstName?.trim() || undefined,
-        middleName: input.middleName === undefined ? undefined : input.middleName,
-        lastName: input.lastName?.trim() || undefined,
-        suffix: input.suffix === undefined ? undefined : input.suffix,
-        email: input.email?.trim() || undefined,
-        contactNo: input.contactNo?.trim() || undefined,
-        office: input.office?.trim() || undefined,
-        position: input.position?.trim() || undefined,
+        firstName: text(input.firstName),
+        middleName: nullable(input.middleName),
+        lastName: text(input.lastName),
+        suffix: nullable(input.suffix),
+        email: text(input.email),
+        contactNo: text(input.contactNo),
+        office: text(input.office),
+        position: text(input.position),
       });
       await this.cache.delete(`v1:user:get:${id}`);
       return updated;
@@ -247,41 +378,49 @@ export class UserService implements IUserService {
     return updated;
   }
 
-  /** Role assignment records who granted the role and when (FR-04). */
-  async assignRole(actorId: string, userId: string, roleId: string): Promise<void> {
-    const role = await this.db.transaction(async (uow) => {
+  /**
+   * Role assignment records who granted the role and when (FR-04). Returns the
+   * updated account: `UserMutationPayload.user` is non-nullable, so the
+   * resolver must hand back a record rather than void.
+   */
+  async assignRole(actorId: string, userId: string, roleId: string): Promise<UserRecord> {
+    const { role, user } = await this.db.transaction(async (uow) => {
       await assertPermission(uow, actorId, "UserService:AssignRole");
 
-      const user = await uow.users.findById(userId);
-      if (!user) throw new NotFoundError("User", userId);
+      const target = await uow.users.findById(userId);
+      if (!target) throw new NotFoundError("User", userId);
 
-      const target = await uow.roles.findById(roleId);
-      if (!target) throw new NotFoundError("Role", roleId);
+      const role = await uow.roles.findById(roleId);
+      if (!role) throw new NotFoundError("Role", roleId);
 
       const existing = await uow.roles.findByUser(userId);
       if (existing.some((link) => link.roleId === roleId)) {
-        throw new ConflictError(`Role assignment '${target.name}'`);
+        throw new ConflictError(`Role assignment '${role.name}'`);
       }
 
       await uow.roles.assign({ userId, roleId, assignedBy: actorId });
-      return target;
+      return { role, user: target };
     });
 
     await this.safeIdpCall(() => this.idp.addRole(userId, role.name), "user.addRole", userId);
+    return user;
   }
 
-  async removeRole(actorId: string, userId: string, roleId: string): Promise<void> {
-    const role = await this.db.transaction(async (uow) => {
+  async removeRole(actorId: string, userId: string, roleId: string): Promise<UserRecord> {
+    const { role, user } = await this.db.transaction(async (uow) => {
       await assertPermission(uow, actorId, "UserService:AssignRole");
 
-      const target = await uow.roles.findById(roleId);
-      if (!target) throw new NotFoundError("Role", roleId);
+      const target = await uow.users.findById(userId);
+      if (!target) throw new NotFoundError("User", userId);
+
+      const role = await uow.roles.findById(roleId);
+      if (!role) throw new NotFoundError("Role", roleId);
 
       const removed = await uow.roles.unassign(userId, roleId);
       if (!removed) {
         throw new NotFoundError("Role assignment", `${userId}:${roleId}`);
       }
-      return target;
+      return { role, user: target };
     });
 
     await this.safeIdpCall(
@@ -289,6 +428,7 @@ export class UserService implements IUserService {
       "user.removeRole",
       userId,
     );
+    return user;
   }
 
   /** Roles currently assigned to a user. */

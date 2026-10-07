@@ -12,6 +12,7 @@ import { toConnectionArgs } from "../helpers.js";
 import type { UserFilter, UserSortField } from "../../interfaces/user.service.interface.js";
 import type {
   MutationAssignRoleArgs,
+  MutationCreateUserArgs,
   MutationDeactivateUserArgs,
   MutationReactivateUserArgs,
   MutationRemoveRoleArgs,
@@ -44,6 +45,12 @@ export const userResolvers = {
   },
 
   Mutation: {
+    createUser: (
+      _p: unknown,
+      { input }: MutationCreateUserArgs,
+      ctx: GraphQLContext,
+    ) => ctx.services.user.create(requireUser(ctx).sub, input),
+
     updateUserProfile: (
       _p: unknown,
       { id, input }: MutationUpdateUserProfileArgs,

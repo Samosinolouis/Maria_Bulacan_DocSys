@@ -58,6 +58,7 @@ const MUTATION_ENTITY_FIELD: Record<string, string> = {
   createDocumentType: "documentType",
   upsertHoliday: "holiday",
   // Users & roles
+  createUser: "user",
   createRole: "role",
   updateRole: "role",
   updateUserProfile: "user",
