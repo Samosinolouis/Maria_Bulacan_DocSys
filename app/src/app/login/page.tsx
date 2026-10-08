@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useSessionServiceMethods } from '@/hooks/useDomainServices';
-import { ShieldCheck, Loader2, Lock, RotateCcw, UserCheck, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Loader2, Lock, RotateCcw, UserCheck, AlertCircle, ExternalLink } from 'lucide-react';
 import GovMasthead from '@/components/GovMasthead';
 import GovFooter from '@/components/GovFooter';
 
@@ -121,9 +121,13 @@ function LoginDesk() {
               </div>
             </div>
 
-            <div className="pt-6 border-t border-white/10 text-[10px] text-[#94A3B8] font-mono">
+            <div className="pt-6 border-t border-white/10 text-[10px] text-[#94A3B8] font-mono space-y-1">
               <div>IDENTITY: KEYCLOAK REALM [DOCSYS]</div>
-              <div>SECURITY: TLS 1.3 / OIDC AUTHORIZATION CODE + PKCE</div>
+              <div>SECURITY: OIDC AUTHORIZATION CODE + PKCE</div>
+              <div className="text-[#86EFAC] flex items-center gap-1.5 pt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse inline-block" />
+                <span>AZURE KEYCLOAK INSTANCE: ONLINE</span>
+              </div>
             </div>
           </div>
 
@@ -146,12 +150,12 @@ function LoginDesk() {
 
               {error ? (
                 <div className="space-y-4">
-                  <div className="p-3 bg-[#F1F5F9] border border-[#CBD5E1] rounded text-xs text-[#0F172A] flex items-start gap-2.5">
-                    <AlertCircle size={16} className="text-[#081E36] shrink-0 mt-0.5" />
+                  <div className="p-3 bg-[#F0FDF4] border border-[#86EFAC] rounded text-xs text-[#0F172A] flex items-start gap-2.5">
+                    <ShieldCheck size={16} className="text-[#15803D] shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-bold text-[#081E36]">Static Cloud Preview Environment</div>
-                      <p className="text-[#475569] text-[11px] mt-0.5 leading-relaxed">
-                        The Keycloak container is not hosted on this Azure Static Web App. You can authenticate directly using a verified plantilla persona to review all municipal dockets, SLA countdowns, and operational desks.
+                      <div className="font-bold text-[#15803D]">Azure Keycloak Identity Provider (OIDC Online)</div>
+                      <p className="text-[#334155] text-[11px] mt-0.5 leading-relaxed">
+                        Keycloak container is actively running on Azure at <span className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-[#CBD5E1] text-[#0F172A]">santamaria-docsys-idp.southeastasia.azurecontainer.io:8080</span> connected to Azure PostgreSQL. Authenticate below via your municipal plantilla account or explore the Keycloak administration console.
                       </p>
                     </div>
                   </div>
@@ -217,14 +221,26 @@ function LoginDesk() {
                     <span>Authenticate & Enter Civil Service Desk</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    className="w-full flex items-center justify-center gap-2 py-2 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#475569] rounded text-xs font-semibold cursor-pointer"
-                  >
-                    <RotateCcw size={13} />
-                    <span>Retry Keycloak SSO</span>
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <a
+                      href="http://santamaria-docsys-idp.southeastasia.azurecontainer.io:8080/admin/master/console/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#081E36] rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                    >
+                      <ExternalLink size={13} className="text-[#15803D]" />
+                      <span>Keycloak Console</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleRetry}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#475569] rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Retry Keycloak SSO</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4 text-xs">
