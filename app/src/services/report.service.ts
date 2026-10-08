@@ -61,7 +61,7 @@ export class ReportService implements IReportService {
             operationName: 'DashboardMetrics',
           })
           .then((d) => ({ id: 'dashboard', ...d.dashboardMetrics })),
-      extract: (r) => ({ items: [{ id: r.id }], endCursor: null }),
+      extract: (r) => ({ items: [r], endCursor: null }),
       rehydrate: (items) => (items.length ? (items[0] as MetricsEntity) : undefined),
     });
     // Strip the synthetic cache id; the UI sees only the metrics fields.

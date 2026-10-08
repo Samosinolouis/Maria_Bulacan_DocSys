@@ -43,6 +43,17 @@ const SESSION_REFRESH_INTERVAL_MS =
 
 const authPort = {
   signIn: async (returnTo?: string) => {
+    try {
+      const res = await fetch('/api/auth/csrf');
+      const ct = res.headers.get('content-type') ?? '';
+      if (!res.ok || !ct.includes('application/json')) {
+        throw new Error('Keycloak OIDC identity provider is not reachable on this host.');
+      }
+    } catch {
+      throw new Error(
+        'Keycloak OIDC identity provider is not reachable on this host. For full authentication, please connect via the local backend stack or deploy the containerized services.',
+      );
+    }
     await signIn('keycloak', { redirectTo: returnTo ?? '/dashboard' });
   },
   /**

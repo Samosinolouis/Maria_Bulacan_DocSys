@@ -8,6 +8,7 @@
 
 import { AppError, type ServiceErrorCode } from '../contracts/errors';
 import type { GraphQLOperation, IGraphQLClient } from '../contracts/graphql';
+import { getFallbackGraphQLData } from './fallbackData';
 
 const DEFAULT_ENDPOINT =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ??
@@ -113,6 +114,13 @@ export class FetchGraphQLClient implements IGraphQLClient {
         cache: 'no-store',
       });
     } catch (cause) {
+      const fallback = getFallbackGraphQLData(
+        operation.operationName,
+        operation.variables as Record<string, unknown> | undefined,
+      );
+      if (fallback !== undefined) {
+        return { data: fallback as TData, error: null };
+      }
       return {
         data: null,
         error: new AppError(

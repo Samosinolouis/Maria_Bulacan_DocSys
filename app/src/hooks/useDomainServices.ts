@@ -10,7 +10,7 @@ import { useServiceMethods } from './useServiceMethods';
 
 export function useSessionServiceMethods() {
   const { session } = useServices();
-  return useServiceMethods(session, ['login', 'logout', 'loadSession', 'getSnapshot'] as const);
+  return useServiceMethods(session, ['login', 'loginPreview', 'logout', 'loadSession', 'getSnapshot'] as const);
 }
 
 export function useRequestService() {

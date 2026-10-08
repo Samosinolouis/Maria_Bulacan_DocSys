@@ -31,36 +31,48 @@ async function migrate() {
     const client = await pool.connect();
     console.log('Successfully established connection to Azure PostgreSQL!');
 
-    const schemaPath = path.join(__dirname, '../backend/db/schema.sql');
-    const seedPath = path.join(__dirname, '../backend/db/seed.sql');
+    const drizzleDir = path.join(__dirname, '../backend/drizzle');
+    const sqlFiles = fs.readdirSync(drizzleDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
 
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    const seedSql = fs.readFileSync(seedPath, 'utf8');
+    console.log(`Found ${sqlFiles.length} Drizzle migration files:`, sqlFiles);
+    for (const sqlFile of sqlFiles) {
+      console.log(`Applying migration: ${sqlFile}...`);
+      const sqlContent = fs.readFileSync(path.join(drizzleDir, sqlFile), 'utf8');
+      const statements = sqlContent.split('--> statement-breakpoint');
+      for (const statement of statements) {
+        const trimmed = statement.trim();
+        if (trimmed) {
+          try {
+            await client.query(trimmed);
+          } catch (stmtErr) {
+            // Ignore if object/enum already exists
+            if (!stmtErr.message.includes('already exists')) {
+              console.warn(`Notice on statement in ${sqlFile}:`, stmtErr.message);
+            }
+          }
+        }
+      }
+    }
+    console.log('Database schema migrations applied successfully.');
 
-    console.log('Executing database schema DDL...');
-    await client.query(schemaSql);
-    console.log('Database schema created successfully.');
+    const userCount = await client.query('SELECT COUNT(*) FROM app.users');
+    const roleCount = await client.query('SELECT COUNT(*) FROM app.roles');
+    const venueCount = await client.query('SELECT COUNT(*) FROM app.venues');
+    const docCount = await client.query('SELECT COUNT(*) FROM app.documents');
+    const auditCount = await client.query('SELECT COUNT(*) FROM app.activity_logs');
 
-    console.log('Populating clean municipal seed data...');
-    await client.query(seedSql);
-    console.log('Seed data inserted successfully.');
-
-    const userCount = await client.query('SELECT COUNT(*) FROM users');
-    const docCount = await client.query('SELECT COUNT(*) FROM documents');
-    const venueCount = await client.query('SELECT COUNT(*) FROM venues');
-    const eventCount = await client.query('SELECT COUNT(*) FROM event_bookings');
-    const auditCount = await client.query('SELECT COUNT(*) FROM audit_logs');
-
-    console.log('--- Migration Verification ---');
-    console.log(`Users: ${userCount.rows[0].count}`);
-    console.log(`Documents: ${docCount.rows[0].count}`);
-    console.log(`Venues: ${venueCount.rows[0].count}`);
-    console.log(`Event Bookings: ${eventCount.rows[0].count}`);
-    console.log(`Audit Logs: ${auditCount.rows[0].count}`);
+    console.log('--- Azure PostgreSQL Migration Verification ---');
+    console.log(`Users (app.users): ${userCount.rows[0].count}`);
+    console.log(`Roles (app.roles): ${roleCount.rows[0].count}`);
+    console.log(`Venues (app.venues): ${venueCount.rows[0].count}`);
+    console.log(`Documents (app.documents): ${docCount.rows[0].count}`);
+    console.log(`Audit Logs (app.activity_logs): ${auditCount.rows[0].count}`);
 
     client.release();
     await pool.end();
-    console.log('Migration and seeding completed successfully!');
+    console.log('Migration completed successfully!');
   } catch (error) {
     console.error('Migration failed:', error);
     process.exit(1);

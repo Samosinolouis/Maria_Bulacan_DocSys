@@ -33,6 +33,82 @@ export interface SessionAuthPort {
   getSessionToken: () => Promise<{ accessToken: string | null; expiresAt?: number | null } | null>;
 }
 
+export const PREVIEW_USERS: Record<string, SessionUser> = {
+  administrator: {
+    id: 'c501b3d6-cae1-4f43-b27b-0c3caf708763',
+    firstName: 'Elmer',
+    middleName: 'B.',
+    lastName: 'Clemente',
+    email: 'administrator@santamaria.gov.ph',
+    contactNo: '(044) 815-2882',
+    office: 'Office of the Municipal Administrator',
+    position: 'Municipal Administrator',
+    roles: [
+      {
+        id: 'ca5dcb0f-1466-4235-9d00-10efe23ec625',
+        name: 'ADMINISTRATOR',
+        description: 'Full statutory authority across municipal operations',
+        permissionPayload: ['*:*'],
+      },
+    ],
+    effectivePermissions: ['*:*'],
+  },
+  clerk: {
+    id: '2e1d4904-5e01-4b84-885a-e9272251ec1a',
+    firstName: 'Sherelyn',
+    middleName: 'O.',
+    lastName: 'Libao',
+    email: 'clerk@santamaria.gov.ph',
+    contactNo: '(044) 815-2882',
+    office: 'Central Receiving Desk',
+    position: 'Administrative Aide IV / Records Custodian',
+    roles: [
+      {
+        id: 'ca001709-b5a2-4ce5-8b1b-b724018a9585',
+        name: 'CLERK_ENCODER',
+        description: 'Intake and screening permissions',
+        permissionPayload: [
+          'RequestService:*',
+          'DocumentService:*',
+          'AttachmentService:*',
+          'NotificationService:*',
+          'EventService:Read',
+          'VenueService:Read',
+          'ReportService:Read',
+        ],
+      },
+    ],
+    effectivePermissions: [
+      'RequestService:*',
+      'DocumentService:*',
+      'AttachmentService:*',
+      'NotificationService:*',
+      'EventService:Read',
+      'VenueService:Read',
+      'ReportService:Read',
+    ],
+  },
+  legal: {
+    id: 'usr-legal-05',
+    firstName: 'Rodrigo',
+    middleName: '',
+    lastName: 'Ramos',
+    email: 'legal@santamaria.gov.ph',
+    contactNo: '(044) 815-2882',
+    office: 'Municipal Legal Office',
+    position: 'Senior Legal Officer',
+    roles: [
+      {
+        id: 'role-legal',
+        name: 'OFFICER',
+        description: 'Legal review and indorsement preparation',
+        permissionPayload: ['RequestService:Read', 'DocumentService:Read', 'DocumentService:Review'],
+      },
+    ],
+    effectivePermissions: ['RequestService:Read', 'DocumentService:Read', 'DocumentService:Review'],
+  },
+};
+
 export class SessionService implements ISessionService {
   private snapshot: SessionSnapshot | null = null;
   private accessToken: string | null = null;
@@ -76,11 +152,43 @@ export class SessionService implements ISessionService {
     await this.auth.signIn(returnTo);
   }
 
+  loginPreview(username: string = 'administrator'): SessionSnapshot {
+    const user = PREVIEW_USERS[username] ?? PREVIEW_USERS.administrator;
+    const snapshot: SessionSnapshot = {
+      user,
+      authenticatedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('docsys_preview_user', username);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    this.accessToken = 'preview-token';
+    this.setSnapshot(snapshot);
+    return snapshot;
+  }
+
   async logout(): Promise<void> {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('docsys_preview_user');
+      } catch {
+        // Ignore storage errors
+      }
+    }
     this.clearAccessToken();
     this.refreshBlockedUntil = 0;
     this.setSnapshot(null);
-    await this.auth.signOut();
+    try {
+      await this.auth.signOut();
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
   }
 
   async completeLogin(): Promise<SessionSnapshot> {
@@ -102,6 +210,17 @@ export class SessionService implements ISessionService {
   }
 
   private async runHydrate(): Promise<SessionSnapshot | null> {
+    if (typeof window !== 'undefined') {
+      try {
+        const previewUser = localStorage.getItem('docsys_preview_user');
+        if (previewUser && PREVIEW_USERS[previewUser]) {
+          return this.loginPreview(previewUser);
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+
     const session = await this.auth.getSessionToken();
     this.adoptToken(session);
     if (!this.accessToken) {

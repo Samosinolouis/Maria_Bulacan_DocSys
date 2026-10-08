@@ -46,6 +46,9 @@ export interface ISessionService {
   /** Start the OIDC Authorization Code + PKCE redirect (NextAuth signIn). */
   login(returnTo?: string): Promise<void>;
 
+  /** Sign in directly using a static civil service plantilla profile for offline/preview mode. */
+  loginPreview(username?: string): SessionSnapshot;
+
   /** Complete the OIDC callback (token exchange), then load `me`. */
   completeLogin(): Promise<SessionSnapshot>;
 

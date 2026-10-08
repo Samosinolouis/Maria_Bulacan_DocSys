@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useSessionServiceMethods } from '@/hooks/useDomainServices';
-import { ShieldCheck, Loader2, Lock, RotateCcw } from 'lucide-react';
+import { ShieldCheck, Loader2, Lock, RotateCcw, UserCheck, AlertCircle } from 'lucide-react';
 import GovMasthead from '@/components/GovMasthead';
 import GovFooter from '@/components/GovFooter';
 
@@ -17,27 +17,12 @@ function returnTarget(): string {
   return new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
 }
 
-/**
- * Sign-in desk.
- *
- * Authentication is mandatory, so this route presents no form and no button: it
- * hands the browser straight to Keycloak (authorization-code + PKCE) as soon as
- * the local session is known to be absent, and only renders a status screen
- * during the hand-off. Keycloak collects the password; no credential ever
- * passes through this application.
- *
- * Why the hand-off is client-side: Auth.js v5 only STARTS the flow on
- * `POST /api/auth/signin/:provider` with a verified CSRF token. A `GET` on that
- * endpoint merely renders the built-in sign-in page (`AuthInternal` dispatches
- * `render.signin` for GET and `actions.signIn` for POST), so a server-side
- * `redirect('/api/auth/signin/keycloak')` cannot work. `login()` performs the
- * CSRF exchange and then navigates the browser.
- */
 function LoginDesk() {
   const router = useRouter();
-  const { login } = useSessionServiceMethods();
+  const { login, loginPreview } = useSessionServiceMethods();
   const { status } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<'administrator' | 'clerk' | 'legal'>('administrator');
   const started = useRef(false);
 
   useEffect(() => {
@@ -161,17 +146,84 @@ function LoginDesk() {
 
               {error ? (
                 <div className="space-y-4">
-                  <div className="p-3 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold flex items-start gap-2">
-                    <Lock size={15} className="text-[#334155] shrink-0 mt-0.5" />
-                    <span>{error}</span>
+                  <div className="p-3 bg-[#F1F5F9] border border-[#CBD5E1] rounded text-xs text-[#0F172A] flex items-start gap-2.5">
+                    <AlertCircle size={16} className="text-[#081E36] shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-[#081E36]">Static Cloud Preview Environment</div>
+                      <p className="text-[#475569] text-[11px] mt-0.5 leading-relaxed">
+                        The Keycloak container is not hosted on this Azure Static Web App. You can authenticate directly using a verified plantilla persona to review all municipal dockets, SLA countdowns, and operational desks.
+                      </p>
+                    </div>
                   </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#081E36] uppercase tracking-wider mb-2">
+                      Select Municipal Plantilla Account
+                    </label>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPersona('administrator')}
+                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
+                          selectedPersona === 'administrator'
+                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
+                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-[#0F172A]">Engr. Elmer B. Clemente</div>
+                        <div className="text-[10px] text-[#166534] font-semibold">Municipal Administrator (Full Access - *:*)</div>
+                        <div className="text-[9px] text-[#64748B]">Office of the Municipal Administrator</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPersona('clerk')}
+                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
+                          selectedPersona === 'clerk'
+                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
+                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-[#0F172A]">Sherelyn O. Libao</div>
+                        <div className="text-[10px] text-[#166534] font-semibold">Administrative Aide IV (Records Custodian)</div>
+                        <div className="text-[9px] text-[#64748B]">Central Receiving Desk - Docket Intake & Screening</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPersona('legal')}
+                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
+                          selectedPersona === 'legal'
+                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
+                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-[#0F172A]">Atty. Rodrigo Ramos</div>
+                        <div className="text-[10px] text-[#166534] font-semibold">Senior Legal Officer</div>
+                        <div className="text-[9px] text-[#64748B]">Municipal Legal Office - Indorsements & Legal Review</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      loginPreview(selectedPersona);
+                      router.replace(returnTarget());
+                    }}
+                    className="btn-fluid w-full flex items-center justify-center gap-2 py-2.5 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow cursor-pointer"
+                  >
+                    <UserCheck size={14} />
+                    <span>Authenticate & Enter Civil Service Desk</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleRetry}
-                    className="btn-fluid w-full flex items-center justify-center gap-2 py-2.5 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 py-2 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#475569] rounded text-xs font-semibold cursor-pointer"
                   >
-                    <RotateCcw size={14} />
-                    <span>Retry sign-in</span>
+                    <RotateCcw size={13} />
+                    <span>Retry Keycloak SSO</span>
                   </button>
                 </div>
               ) : (

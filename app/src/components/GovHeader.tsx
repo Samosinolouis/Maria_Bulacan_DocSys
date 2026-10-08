@@ -23,7 +23,7 @@ export default function GovHeader({
   onLogout,
 }: GovHeaderProps) {
   return (
-    <header className="gov-header">
+    <header className="gov-header relative z-30">
       <div className="w-full px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 lg:gap-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

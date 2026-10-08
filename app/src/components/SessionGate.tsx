@@ -13,7 +13,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useApp } from '@/providers/AppProvider';
 
-const PUBLIC_ROUTES = ['/login', '/auth/callback'];
+const PUBLIC_ROUTES = ['/login', '/auth/callback', '/api/auth'];
 
 export default function SessionGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -25,18 +25,18 @@ export default function SessionGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isPublic) return;
-    if (status === 'unauthenticated') {
+    if (!isAuthenticated && status === 'unauthenticated') {
       router.replace(`/login?returnTo=${encodeURIComponent(pathname ?? '/dashboard')}`);
       return;
     }
     if (session?.error === 'RefreshAccessTokenError') {
       router.replace('/login');
     }
-  }, [isPublic, status, session?.error, router, pathname]);
+  }, [isPublic, status, session?.error, router, pathname, isAuthenticated]);
 
   if (isPublic) return <>{children}</>;
 
-  const loading = status === 'loading' || (status === 'authenticated' && !isSessionReady);
+  const loading = !isAuthenticated && (status === 'loading' || (status === 'authenticated' && !isSessionReady));
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
@@ -50,6 +50,6 @@ export default function SessionGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (status === 'unauthenticated' || !isAuthenticated) return null;
+  if (!isAuthenticated) return null;
   return <>{children}</>;
 }

@@ -18,7 +18,12 @@ BASE="${1:-http://localhost:3000}"
 USERNAME="${2:-administrator}"
 PASSWORD="${3:-DocSys2026!}"
 # Windows sets LOCALAPPDATA with backslashes; curl needs forward slashes.
-JAR="${JAR:-${LOCALAPPDATA//\\//}/Temp/docsys-auth-jar.txt}"
+if [ -n "${LOCALAPPDATA:-}" ]; then
+  DEFAULT_JAR="${LOCALAPPDATA//\\//}/Temp/docsys-auth-jar.txt"
+else
+  DEFAULT_JAR="/tmp/docsys-auth-jar.txt"
+fi
+JAR="${JAR:-$DEFAULT_JAR}"
 rm -f "$JAR"
 
 fail() { echo "FAIL: $1"; exit 1; }
@@ -40,14 +45,19 @@ AUTH_URL=$(echo "$SIGNIN" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p' | sed 's/\\u00
 echo "[2] authorize url ok ($(echo "$AUTH_URL" | cut -c1-60)...)"
 
 # 3. Follow it to the Keycloak login form. The DocSys login theme is a
-#    keycloakify SPA: the <form> is built client-side, so there is no
-#    action="..." attribute in the server HTML. Read url.loginAction out of the
-#    kcContext the FTL embeds instead.
+#    keycloakify SPA (reads url.loginAction out of kcContext); fallback to
+#    stock Keycloak form action if custom theme is not built.
 LOGIN_HTML=$(curl -s -c "$JAR" -b "$JAR" -L "$AUTH_URL")
 FORM_ACTION=$(printf '%s' "$LOGIN_HTML" \
   | sed -n 's/.*"loginAction": *"\([^"]*\)".*/\1/p' \
   | head -1 \
   | sed 's/\\\//\//g; s/\\u0026/\&/g')
+if [ -z "$FORM_ACTION" ]; then
+  FORM_ACTION=$(printf '%s' "$LOGIN_HTML" \
+    | sed -n 's/.*action="\([^"]*login-actions\/authenticate[^"]*\)".*/\1/p' \
+    | head -1 \
+    | sed 's/&amp;/\&/g')
+fi
 case "$FORM_ACTION" in
   *login-actions/authenticate*) ;;
   *) fail "not the Keycloak login form (got '${FORM_ACTION:0:80}') - realm docsys up?" ;;

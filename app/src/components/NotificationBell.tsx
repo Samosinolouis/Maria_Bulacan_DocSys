@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Bell, BellOff, CheckCheck, Loader2 } from 'lucide-react';
+import { AlertCircle, Bell, BellOff, CheckCheck, Loader2, X } from 'lucide-react';
 import { useApp } from '@/providers/AppProvider';
 import {
   useAsyncAction,
@@ -30,6 +30,7 @@ export default function NotificationBell() {
   const canMarkRead = useCan('NotificationService:MarkRead');
 
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<'left' | 'right'>('left');
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const unreadQuery = useUnreadNotificationCount();
@@ -49,16 +50,65 @@ export default function NotificationBell() {
   );
   const unreadCount = unreadQuery.data ?? 0;
 
-  // Close the panel on an outside click (the panel is anchored in the header).
+  // Dynamically compute whether dropdown should open towards left or right
   useEffect(() => {
     if (!open) return;
-    const handlePointerDown = (event: MouseEvent) => {
+
+    const updatePlacement = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const panelWidth = 384; // sm:w-96
+
+      // On mobile / narrow screens (< 640px), align left to fit screen bounds
+      if (viewportWidth < 640) {
+        setPlacement('left');
+        return;
+      }
+
+      const spaceRight = viewportWidth - rect.left;
+      const spaceLeft = rect.right;
+
+      // When the bell is in the right half of the screen and there's enough space to the left:
+      if (rect.left > viewportWidth / 2 && spaceLeft >= panelWidth) {
+        setPlacement('right');
+      } else if (spaceRight >= panelWidth) {
+        setPlacement('left');
+      } else {
+        setPlacement(spaceRight >= spaceLeft ? 'left' : 'right');
+      }
+    };
+
+    updatePlacement();
+    window.addEventListener('resize', updatePlacement);
+    return () => window.removeEventListener('resize', updatePlacement);
+  }, [open]);
+
+  // Close the panel on outside click/tap or Escape key.
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
     document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [open]);
 
   const handleOpenNotification = async (notification: Notification) => {
@@ -75,6 +125,9 @@ export default function NotificationBell() {
       selectedRequest.id === notification.requestId
     ) {
       setSelectedRequest(selectedRequest);
+    }
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setOpen(false);
     }
   };
 
@@ -109,24 +162,48 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 max-w-[92vw] bg-white border border-[#CBD5E1] rounded shadow-xl z-50 overflow-hidden">
+        <div
+          className={`absolute mt-2 z-50 bg-white border border-[#CBD5E1] rounded shadow-xl overflow-hidden transition-all duration-150 animate-fluid-fade ${
+            placement === 'right'
+              ? 'right-0 sm:w-96 max-w-[calc(100vw-1.5rem)]'
+              : 'left-0 w-[calc(100vw-1.5rem)] sm:w-96 max-w-[calc(100vw-1.5rem)]'
+          }`}
+        >
           <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[#081E36] text-white">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Notification Inbox</span>
-            {canMarkRead && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Bell size={13} className="text-[#86EFAC] shrink-0" />
+              <span className="text-[11px] font-bold uppercase tracking-wider truncate">Notification Inbox</span>
+              {unreadCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-[#15803D] text-white text-[9px] font-mono font-bold leading-none">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {canMarkRead && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  disabled={markAllAction.isPending || unreadCount === 0}
+                  className="btn-fluid inline-flex items-center gap-1 px-2 py-1 rounded border border-white/25 text-[10px] font-bold text-white hover:bg-white/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {markAllAction.isPending ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <CheckCheck size={11} />
+                  )}
+                  <span>Mark all read</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleMarkAllRead}
-                disabled={markAllAction.isPending || unreadCount === 0}
-                className="btn-fluid inline-flex items-center gap-1 px-2 py-1 rounded border border-white/25 text-[10px] font-bold text-white hover:bg-white/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setOpen(false)}
+                aria-label="Close notification inbox"
+                className="p-1 rounded text-white/70 hover:text-white hover:bg-white/10 cursor-pointer transition-colors"
               >
-                {markAllAction.isPending ? (
-                  <Loader2 size={11} className="animate-spin" />
-                ) : (
-                  <CheckCheck size={11} />
-                )}
-                <span>Mark all read</span>
+                <X size={14} />
               </button>
-            )}
+            </div>
           </div>
 
           <div className="max-h-96 overflow-y-auto">
@@ -183,7 +260,7 @@ export default function NotificationBell() {
                         {notification.title}
                       </span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#64748B] font-mono">
-                        <span className="uppercase tracking-wide">
+                        <span className="uppercase tracking-wide break-words">
                           {renderTemplate(notification.template, notification.payload)}
                         </span>
                         <span className="text-[#CBD5E1]">|</span>
