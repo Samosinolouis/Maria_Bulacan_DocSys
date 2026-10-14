@@ -225,8 +225,9 @@ export function authorizeOrThrow(
 1. **Login.** `login(returnTo)` redirects to Keycloak Authorization Code + PKCE (`KEYCLOAK_REALM_URL` + `/protocol/openid-connect/auth`). The return path is carried in `state`.
 2. **Callback.** `completeLogin()` reads the code from the URL, exchanges it at the token endpoint, stores the access and refresh tokens in memory (module scope, not localStorage), then calls `loadSession()`.
 3. **Bootstrap.** `loadSession()` runs the `SessionBootstrap` query (`me` with roles and `effectivePermissions`), builds `SessionSnapshot`, hands the `AuthzSubject` to `IAuthorizationEngine.setSubject()`, and notifies subscribers.
-4. **Token refresh.** Before expiry, refresh silently at the token endpoint. On refresh failure, clear the session and redirect to `/login`.
-5. **Logout.** Clear memory tokens, notify subscribers with `null`, redirect to Keycloak end-session.
+4. **Token refresh.** Before expiry, refresh silently at the token endpoint. A failed refresh is flagged on the session by the Auth.js jwt callback (`error: 'RefreshAccessTokenError'`); the route gate then calls `discard()` (clear the dead cookie + snapshot) and sends the user to `/login`, where the hand-off starts a fresh authorization request. The redirect alone is not enough - see [ROUTING.md](../ROUTING.md) route protection.
+5. **Discard.** `discard()` forgets the local session (cookie, token, snapshot, preview marker) WITHOUT ending the Keycloak SSO session, so a still-live IdP session answers the next authorization request silently. Single-flight: the route gate and the sign-in page both call it for the same broken session.
+6. **Logout.** Clear memory tokens, notify subscribers with `null`, redirect to Keycloak end-session (RP-initiated logout).
 
 Configuration (env):
 

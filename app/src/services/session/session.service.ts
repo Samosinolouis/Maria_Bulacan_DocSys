@@ -29,6 +29,12 @@ export interface SessionAuthPort {
   signIn: (returnTo?: string) => Promise<void>;
   /** Clear the NextAuth session and redirect to Keycloak logout. */
   signOut: () => Promise<void>;
+  /**
+   * Clear ONLY the NextAuth session cookie (`signOut({ redirect: false })`),
+   * leaving the Keycloak SSO session untouched so the next authorization
+   * request can be answered from it.
+   */
+  clearSession: () => Promise<void>;
   /** Read the current NextAuth session token (client-side `getSession`). */
   getSessionToken: () => Promise<{ accessToken: string | null; expiresAt?: number | null } | null>;
 }
@@ -118,6 +124,8 @@ export class SessionService implements ISessionService {
   private refreshInFlight: Promise<boolean> | null = null;
   /** Single-flight guard for the provider's hydrate calls. */
   private hydrateInFlight: Promise<SessionSnapshot | null> | null = null;
+  /** Single-flight guard for discarding an unusable session. */
+  private discardInFlight: Promise<void> | null = null;
   /** Back-off window after a failed refresh (no session / transport error). */
   private refreshBlockedUntil = 0;
   private readonly listeners = new Set<(snapshot: SessionSnapshot | null) => void>();
@@ -172,6 +180,53 @@ export class SessionService implements ISessionService {
   }
 
   async logout(): Promise<void> {
+    this.resetLocalState();
+    try {
+      await this.auth.signOut();
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+  }
+
+  /**
+   * Drop a session whose stored tokens are dead but whose Auth.js cookie still
+   * decrypts, so the browser keeps being told it is `authenticated`.
+   *
+   * That combination is what made `/dashboard` and `/login` bounce off each
+   * other forever: the route gate evicted the user to `/login` on the refresh
+   * error, while the sign-in page saw a valid-looking session and sent them
+   * straight back into the app. Clearing the cookie first turns the status into
+   * `unauthenticated`, which is the state the sign-in page's automatic hand-off
+   * needs in order to start a real authorization request.
+   *
+   * The Keycloak SSO session is deliberately left alone: if it is still alive
+   * the next authorization request is answered from it and the operator is
+   * returned to work without re-entering credentials.
+   *
+   * Single-flight: the route gate and the sign-in page both call this for the
+   * same broken session.
+   */
+  async discard(): Promise<void> {
+    if (this.discardInFlight) return this.discardInFlight;
+    this.discardInFlight = this.runDiscard().finally(() => {
+      this.discardInFlight = null;
+    });
+    return this.discardInFlight;
+  }
+
+  private async runDiscard(): Promise<void> {
+    this.resetLocalState();
+    try {
+      await this.auth.clearSession();
+    } catch {
+      // A cookie that cannot be cleared must not block the sign-in hand-off.
+    }
+  }
+
+  /** Forget everything this tab holds about the current session. */
+  private resetLocalState(): void {
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem('docsys_preview_user');
@@ -182,13 +237,6 @@ export class SessionService implements ISessionService {
     this.clearAccessToken();
     this.refreshBlockedUntil = 0;
     this.setSnapshot(null);
-    try {
-      await this.auth.signOut();
-    } catch {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
   }
 
   async completeLogin(): Promise<SessionSnapshot> {

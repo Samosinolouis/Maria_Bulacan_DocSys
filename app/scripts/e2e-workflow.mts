@@ -17,6 +17,7 @@ let currentToken: string | null = null;
 const bundle = createServices({
   signIn: async () => {},
   signOut: async () => {},
+  clearSession: async () => {},
   getSessionToken: async () =>
     currentToken ? { accessToken: currentToken, expiresAt: null } : null,
 });

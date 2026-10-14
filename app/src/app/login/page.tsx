@@ -12,15 +12,23 @@ import GovFooter from '@/components/GovFooter';
 /**
  * Read the return target at call time rather than through `useSearchParams`,
  * which would force a Suspense fallback and empty the prerendered HTML.
+ *
+ * Anything that is not an in-app path is dropped (an absolute URL would be an
+ * open redirect) and `/login` is never accepted: returning to this page is a
+ * redirect loop.
  */
 function returnTarget(): string {
-  return new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
+  const target = new URLSearchParams(window.location.search).get('returnTo');
+  if (!target || !target.startsWith('/') || target.startsWith('//') || target.startsWith('/login')) {
+    return '/dashboard';
+  }
+  return target;
 }
 
 function LoginDesk() {
   const router = useRouter();
-  const { login, loginPreview } = useSessionServiceMethods();
-  const { status } = useSession();
+  const { login, loginPreview, discard } = useSessionServiceMethods();
+  const { status, data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<'administrator' | 'clerk' | 'legal'>('administrator');
   const started = useRef(false);
@@ -32,6 +40,17 @@ function LoginDesk() {
     if (status === 'loading') return;
 
     if (status === 'authenticated') {
+      // A session whose stored tokens are dead still reads as `authenticated`
+      // (the Auth.js cookie decrypts; the jwt callback only flags it with
+      // `error`). Sending that visitor back into the app is what produced the
+      // endless /login <-> /dashboard loop, because the route gate evicts them
+      // straight back here. Drop the unusable cookie instead: the status then
+      // becomes `unauthenticated` and the hand-off below starts a real
+      // authorization request.
+      if (session?.error) {
+        void discard().catch(() => null);
+        return;
+      }
       router.replace(returnTarget());
       return;
     }
@@ -45,7 +64,7 @@ function LoginDesk() {
       started.current = false;
       setError(err instanceof Error ? err.message : 'Unable to reach the identity provider.');
     });
-  }, [status, login, router]);
+  }, [status, session?.error, login, discard, router]);
 
   const handleRetry = () => {
     setError(null);

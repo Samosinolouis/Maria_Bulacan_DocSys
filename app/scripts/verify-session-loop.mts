@@ -13,8 +13,15 @@
  *     token skips the read, concurrent callers share one refresh, and a failed
  *     refresh backs off instead of being retried by every caller.
  *
+ *  C. SessionService.discard() drops a session whose tokens are dead but whose
+ *     Auth.js cookie still decrypts - the state that made /dashboard and /login
+ *     bounce off each other forever, because the route gate evicted the user to
+ *     /login while the sign-in page saw a valid-looking session and sent them
+ *     straight back. The cookie must be cleared (once, single-flight) so the
+ *     sign-in page can start a real authorization request.
+ *
  * Part A drives the real FetchGraphQLClient against the live backend with a
- * deliberately bogus Bearer token; part B drives SessionService with fakes.
+ * deliberately bogus Bearer token; parts B and C drive SessionService with fakes.
  *
  * Run from `app/`:
  *   ../backend/node_modules/.bin/tsx --tsconfig tsconfig.json scripts/verify-session-loop.mts
@@ -174,6 +181,7 @@ async function verifySessionService() {
   const auth: SessionAuthPort = {
     signIn: async () => {},
     signOut: async () => {},
+    clearSession: async () => {},
     getSessionToken: async () => {
       reads += 1;
       return session;
@@ -189,6 +197,7 @@ async function verifySessionService() {
   const auth2: SessionAuthPort = {
     signIn: async () => {},
     signOut: async () => {},
+    clearSession: async () => {},
     getSessionToken: async () => {
       reads2 += 1;
       return { accessToken: 'token-z', expiresAt: inSeconds(600) };
@@ -249,10 +258,67 @@ async function verifySessionService() {
   );
 }
 
+async function verifyDiscard() {
+  console.log('C. dead-session recovery (the /login <-> /dashboard loop)');
+
+  const gql = new FakeGql();
+  let clears = 0;
+  let cookie: { accessToken: string | null; expiresAt?: number | null } | null = {
+    accessToken: 'dead-token',
+    expiresAt: Math.floor(Date.now() / 1000) + 600,
+  };
+  const auth: SessionAuthPort = {
+    signIn: async () => {},
+    signOut: async () => {},
+    // Mirrors the real port: clearing the cookie makes the session read answer
+    // null, which is what flips Auth.js from `authenticated` to
+    // `unauthenticated` and lets the sign-in hand-off run.
+    clearSession: async () => {
+      clears += 1;
+      cookie = null;
+    },
+    getSessionToken: async () => cookie,
+  };
+  const svc = new SessionService(gql, auth);
+
+  await svc.hydrate();
+  check('session established before discard', svc.isAuthenticated(), 'snapshot present');
+
+  // Both the route gate and the sign-in page call this for the same session.
+  await Promise.all([svc.discard(), svc.discard(), svc.discard()]);
+  check('concurrent discards clear the cookie once', clears === 1, `clears=${clears}`);
+  check('discard drops the snapshot', !svc.isAuthenticated(), 'isAuthenticated=false');
+  check(
+    'discard forgets the access token',
+    (await svc.getAccessToken()) === null,
+    'token=null',
+  );
+
+  // A port that cannot clear the cookie must not throw: the hand-off still has
+  // to happen, otherwise the user is stranded on the gate.
+  const stubborn = new SessionService(new FakeGql(), {
+    signIn: async () => {},
+    signOut: async () => {},
+    clearSession: async () => {
+      throw new Error('cookie clear failed');
+    },
+    getSessionToken: async () => ({ accessToken: 'dead-token', expiresAt: null }),
+  });
+  await stubborn.hydrate();
+  let threw = false;
+  try {
+    await stubborn.discard();
+  } catch {
+    threw = true;
+  }
+  check('a failed clear never blocks the hand-off', !threw && !stubborn.isAuthenticated(), 'resolved');
+}
+
 async function main() {
   const realToken = await fetchRealToken();
   await verifyTransport(realToken);
   await verifySessionService();
+  await verifyDiscard();
 
   if (failures > 0) {
     console.log(`\nFAIL: ${failures} check(s) failed`);

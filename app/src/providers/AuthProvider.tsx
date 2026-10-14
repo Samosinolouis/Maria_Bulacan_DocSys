@@ -86,6 +86,15 @@ const authPort = {
     await signOut({ redirect: false });
     window.location.href = endSessionUrl.toString();
   },
+  /**
+   * Clear ONLY the Auth.js session cookie. Used when the stored tokens are
+   * dead but the cookie still decrypts: without clearing it Auth.js keeps
+   * answering `authenticated`, so the sign-in page would bounce the user back
+   * into the app instead of starting a fresh authorization request.
+   */
+  clearSession: async () => {
+    await signOut({ redirect: false });
+  },
   getSessionToken: async () => {
     const session = await getSession();
     return session
