@@ -188,7 +188,7 @@ Nothing about the API or the frontend is containerised: `docker compose up -d` s
 
 - Node.js 22 or later (the backend declares `engines.node >= 22`) and npm.
 - Docker Desktop, running.
-- Java 21 and Apache Maven, only for building the Keycloak login theme (step 5).
+- Java 21 and Apache Maven (the Maven `bin` directory on `PATH`), only for building the Keycloak login theme (step 5).
 
 > If `NODE_ENV=production` is exported in your shell, npm prunes devDependencies and `tsx` / `typescript` / `drizzle-kit` disappear. Install with `npm install --include=dev` in both `backend/` and `app/`.
 
@@ -266,6 +266,15 @@ docker compose up -d keycloak
 ```
 
 Rebuild with Keycloak stopped, always: while the container runs it locks the jar and the build fails with `EPERM`.
+
+> **The DocSys design is not in the committed theme source right now.** The twelve owned files under `keycloack-idp-docsys/src/login/` are the vendored shadcn originals, so a rebuild produces the stock sign-in page; the designed page is live only because the deployed jar was built (2026-10-08) while the design was still uncommitted. Restore it before rebuilding - see "Current state" in [`keycloack-idp-docsys/README.md`](./keycloack-idp-docsys/README.md), which also covers the prerequisites, the previews, the owned-versus-vendored editing rules and the troubleshooting table.
+
+Confirm the theme is the one being served (a stock Keycloak page references nothing under `login/keycloack-idp-docsys/`):
+
+```bash
+curl -s "http://localhost:8080/realms/docsys/protocol/openid-connect/auth?client_id=docsys-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback%2Fkeycloak&response_type=code&scope=openid&state=probe&nonce=probe&code_challenge=abcabcabcabcabcabcabcabcabcabcabcabcabcabc0&code_challenge_method=S256" \
+  | grep -o '/resources/[^"]*login/keycloack-idp-docsys[^"]*'
+```
 
 ### 6. Verify the instance
 

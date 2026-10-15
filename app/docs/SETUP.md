@@ -113,7 +113,16 @@ If no realm users exist yet, create one in the Keycloak admin console (http://lo
 
 ## Keycloak Login Theme
 
-The Keycloak-hosted sign-in pages are rendered by the keycloakify project in `keycloack-idp-docsys/` (React + Vite, its own `node_modules`). Keycloak serves it as the realm's `loginTheme`, so the IdP pages carry the same institutional chrome as the app.
+The Keycloak-hosted sign-in pages are rendered by the keycloakify project in `keycloack-idp-docsys/` (React + Vite, its own `node_modules`). Keycloak serves it as the realm's `loginTheme`, so the IdP pages carry the same institutional chrome as the app. The full reference - prerequisites, preview, editing rules, troubleshooting - is [`keycloack-idp-docsys/README.md`](../keycloack-idp-docsys/README.md).
+
+> **The committed source does not currently contain the DocSys design.** The twelve owned files under `keycloack-idp-docsys/src/login/` match the vendored shadcn originals, so a rebuild produces the stock sign-in page; the designed page is live only because the deployed jar was built (2026-10-08) while the design was uncommitted in the working tree. Restore the design before rebuilding - see "Current state" in the theme README.
+
+Initialize (first run in this checkout):
+
+```bash
+cd keycloack-idp-docsys
+npm install --include=dev     # postinstall runs `keycloakify sync-extensions`
+```
 
 Build and deploy (needs Apache Maven on PATH in addition to Java 21). Rebuild with Keycloak **stopped** - a running container holds the mounted jar open and Windows refuses the rename into `dist_keycloak/` with `EPERM`:
 
@@ -138,7 +147,16 @@ curl -s -X PUT http://localhost:8080/admin/realms/docsys \
   -d '{"loginTheme":"keycloack-idp-docsys"}'
 ```
 
-The theme is a single-page app: the server HTML contains no `<form>`; the login form is built client-side and posts to the Keycloak `login-actions/authenticate` URL embedded in the page's `kcContext`. Preview the pages without Keycloak via `npm run storybook` (port 6006) in `keycloack-idp-docsys/`.
+The theme is a single-page app: the server HTML contains no `<form>`; the login form is built client-side and posts to the Keycloak `login-actions/authenticate` URL embedded in the page's `kcContext`. Preview the pages without Keycloak via `npm run storybook` (port 6006) or `npm run dev` in `keycloack-idp-docsys/`.
+
+Confirm the theme is actually being served - a stock Keycloak page references nothing under `login/keycloack-idp-docsys/`:
+
+```bash
+curl -s "http://localhost:8080/realms/docsys/protocol/openid-connect/auth?client_id=docsys-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback%2Fkeycloak&response_type=code&scope=openid&state=probe&nonce=probe&code_challenge=abcabcabcabcabcabcabcabcabcabcabcabcabcabc0&code_challenge_method=S256" \
+  | grep -o '/resources/[^"]*login/keycloack-idp-docsys[^"]*'
+```
+
+A theme change also changes the `/resources/<cache-token>/` prefix, which is the quickest way to tell whether a rebuild landed.
 
 ### Sign out
 
