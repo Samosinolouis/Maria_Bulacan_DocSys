@@ -95,6 +95,7 @@ export class RequestService implements IRequestService {
       ttlMs: TTL.OPERATIONAL,
       matchFn: (entity) => {
         const req = entity as Request;
+        if (filter?.statusIn?.length) return filter.statusIn.includes(req.status);
         if (!filter?.status) return true;
         return req.status === filter.status;
       },

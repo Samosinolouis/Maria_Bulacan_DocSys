@@ -803,6 +803,8 @@ export interface ScreenRequestInput {
 
 export interface RequestFilter {
   status?: Request['status'] | null;
+  /** Union filter: matches any of the listed statuses (empty = ignored). */
+  statusIn?: Request['status'][] | null;
   requestTypeId?: string | null;
   originOffice?: string | null;
   priority?: RequestPriority | null;
@@ -884,6 +886,8 @@ export interface CloseRequestInput {
   requestId: string;
   /** SIGNED_FINAL attachment id, required before closing (FR-29). */
   finalAttachmentId?: string | null;
+  /** Optional archive folder; every document of the request is filed into it. */
+  folderId?: string | null;
   notes?: string | null;
 }
 

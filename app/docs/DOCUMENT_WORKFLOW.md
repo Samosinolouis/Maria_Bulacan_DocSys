@@ -207,8 +207,8 @@ Upload the final signed copy first (FR-29):
 
 Close the request:
 
-- `documents.close({ requestId, finalAttachmentId, notes? })` -> `closeRequest` mutation
-- Returns the updated `Document`; the request becomes `CLOSED` and read-only (FR-30, FR-31). A denied request may close directly without transmission.
+- `documents.close({ requestId, finalAttachmentId, folderId?, notes? })` -> `closeRequest` mutation
+- Returns the updated `Document`; the request becomes `CLOSED` and read-only (FR-30, FR-31). Step 5 (transmission) is OPTIONAL: a request that is approved, endorsed, or denied is closed and filed straight away, without a dispatch record.
 
 Archive retrieval:
 
@@ -217,7 +217,7 @@ Archive retrieval:
 
 **UI update:** the archive count increments; the dossier renders read-only.
 
-**Authorization:** `DocumentService:Close` (guard: request `APPROVED` / `ENDORSED` / `DENIED` / `TRANSMITTED`), `AttachmentService:Download`.
+**Authorization:*** `DocumentService:Close` (guard: request `status !== 'CLOSED'`, so transmission is optional), `AttachmentService:Download`.
 
 > **Backend not covered yet:** `closeRequest` is a skeleton; the download service is a skeleton; the upload route is a stub.
 

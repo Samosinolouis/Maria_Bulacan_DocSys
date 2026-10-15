@@ -74,9 +74,13 @@ export const POLICY: readonly ActionRule[] = [
     reason: 'Only approved, endorsed, or signed documents can be transmitted.',
   },
   {
+    // Step 6 is reachable from any open request status: transmission (Step 5)
+    // is optional, so a fulfilled request can be closed and filed without a
+    // dispatch record. The backend mirrors this (DocumentService.close) and
+    // still requires the signed final copy (FR-29).
     action: 'DocumentService:Close',
-    guard: STATUS_IN(['APPROVED', 'ENDORSED', 'DENIED', 'TRANSMITTED']),
-    reason: 'This request is not in a closable state.',
+    guard: (ctx) => attr(ctx, 'status') !== 'CLOSED',
+    reason: 'This request is already closed and read-only.',
   },
   {
     action: 'EventService:Create',

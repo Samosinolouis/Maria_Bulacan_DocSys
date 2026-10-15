@@ -278,7 +278,7 @@ Columns: **Contract method** -> GraphQL operation -> required action -> cache be
 | `review` | `reviewDocument(input)` | `DocumentService:Review` (guard: `UNDER_REVIEW`) | invalidate document + request + metrics |
 | `sign` | `signDocument(input)` | `DocumentService:Sign` (guard: `APPROVED`/`ENDORSED`, `signatoryRequired`) | invalidate document |
 | `transmit` | `transmitDocument(input)` | `DocumentService:Transmit` (guard: `APPROVED`/`ENDORSED`/`SIGNED`) | invalidate document + request |
-| `close` | `closeRequest(input)` | `DocumentService:Close` (guard: request `APPROVED`/`ENDORSED`/`DENIED`/`TRANSMITTED`) | invalidate request + linked documents |
+| `close` | `closeRequest(input)` | `DocumentService:Close` (guard: request `status !== 'CLOSED'`; transmission optional) | invalidate request + linked documents |
 
 ### AttachmentService
 
