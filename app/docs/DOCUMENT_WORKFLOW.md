@@ -48,6 +48,8 @@ Clerk/Encoder receives the incoming request and logs it. The frontend calls:
 
 Input: `requestTypeId`, `title`, `requestingParty`, `originOffice`, `channel` (`WALK_IN` | `MAIL` | `COURIER` | `EMAIL`), `priority`, `receivedAt`.
 
+> **Sanitation:** the service cleans this input before the mutation is issued (`services/shared/sanitize.ts`) - whitespace collapsed, markup and invisible control characters stripped, `requestTypeId` / `channel` / `priority` validated, and the column limits from the backend schema enforced (`title` 500 characters, `requestingParty` and `originOffice` 255). A rejected field throws `VALIDATION` naming the field and the wizard shows the message inline, so a bad value never reaches PostgreSQL; the backend re-validates (NFR-07).
+
 It returns the created `Request`:
 
 ```ts

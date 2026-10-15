@@ -133,6 +133,7 @@ Rules:
 3. **Reads** use `executeQueryWithCache`. **Mutations** do not use the cache except for invalidation.
 4. **Operation documents** live in `app/src/services/graphql/<domain>.ts` as exported constants. Services never inline GraphQL strings.
 5. **No React imports.** Services are plain TypeScript.
+6. **Mutations sanitize their input before the round trip.** Free-text fields go through `app/src/services/shared/sanitize.ts`: whitespace collapsed, markup and invisible control characters removed, and the column length the backend schema declares enforced (`sanitizeEncodeRequestInput` for Step 1, `sanitizeText` for any other field). A rejected field throws `AppError('VALIDATION', message)` naming the field, so the view reports it inline instead of failing at the database; the backend still re-validates (NFR-07).
 
 ---
 
@@ -260,6 +261,8 @@ Columns: **Contract method** -> GraphQL operation -> required action -> cache be
 | `encode` | `encodeRequest(input)` | `RequestService:Encode` | invalidate create + metrics |
 | `screen` | `screenRequest(input)` | `RequestService:Screen` (guard: `RECEIVED`) | invalidate entity + metrics |
 | `resubmit` | `resubmitRequest(id)` | `RequestService:Screen` | invalidate entity + metrics |
+
+`encode` sanitizes its input first (`sanitizeEncodeRequestInput`): markup, invisible control characters and over-long values are rejected locally with `VALIDATION`, naming the offending field, before the mutation is issued.
 
 ### DocumentService
 

@@ -27,6 +27,7 @@ import {
 } from './cache/helpers';
 import { REQUEST_OPS } from './graphql/request.ops';
 import { mapConnection, normalizeRequest } from './shared/normalize';
+import { sanitizeEncodeRequestInput } from './shared/sanitize';
 
 export class RequestService implements IRequestService {
   constructor(
@@ -141,13 +142,22 @@ export class RequestService implements IRequestService {
     });
   }
 
+  /**
+   * Step 1: encode a reception (FR-07..11). The input is sanitized here, before
+   * the round trip: whitespace collapsed, markup and invisible control
+   * characters removed, column limits enforced. A rejected field fails with
+   * `VALIDATION` and a message naming the field, so the intake form reports it
+   * inline instead of letting PostgreSQL reject an over-long varchar. The
+   * backend re-validates (NFR-07).
+   */
   async encode(input: EncodeRequestInput): Promise<Request> {
     authorizeOrThrow(this.authz, 'RequestService:Encode');
+    const cleanInput = sanitizeEncodeRequestInput(input);
     const payload = await this.gql.request<{
       encodeRequest: MutationAnswer<'request', Request>;
     }>({
       document: REQUEST_OPS.encode,
-      variables: { input },
+      variables: { input: cleanInput },
       operationName: 'EncodeRequest',
     });
     invalidateChangedEntities(this.cache, payload.encodeRequest.changedEntities);
