@@ -73,7 +73,7 @@ One view per route, under `app/src/components/views/`:
 | `PrepareView` | `/prepare` | Drafting studio, template library, submission for review |
 | `ReviewView` | `/review` | Decision queue: approve, endorse, deny with grounds |
 | `TransmitView` | `/transmit` | Dispatch records, proof of transmission upload |
-| `ArchiveView` | `/archive` | Closed records, search, dossier retrieval |
+| `ArchiveView` | `/archive` | Closed records, search, dossier retrieval, pending-archival desk |
 | `ScheduleView` | `/schedule` | Venue calendar, conflict detection, event CRUD |
 | `ReportsView` | `/reports` | ARTA metrics, category summaries, exports |
 | `SettingsView` | `/settings` | Reference data, venues, holidays, user and role administration |
@@ -89,6 +89,10 @@ Three-step intake wizard (classification, attachments, screening checklist). Con
 ### DocumentDetailModal
 
 The dossier inspector: particulars, six-stage lifecycle tracker, attachments, transmissions, audit trail, and the decision actions. The largest component in the app; it receives the document plus the current user and emits `onUpdateStatus`, `onPrintRoutingSlip`.
+
+### ArchiveRequestDialog
+
+The single Step 6 close-and-file form (FR-29..31). Both the archive desk (`ArchiveView`) and the dossier (`DocumentDetailModal`) open THIS component, so the two paths cannot drift: it shows the output documents, the signed final copy state (mandatory, FR-29) with its upload control, the destination folder, and the archival notes. It owns the `closeRequest` call and portals itself to `document.body` (see `Portal.tsx`), which is what keeps it out of the containing block of the animated panel or page root that renders it.
 
 ### RoutingSlipModal
 

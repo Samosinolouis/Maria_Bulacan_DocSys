@@ -10,20 +10,14 @@ import {
   FileText,
   Download,
   Paperclip,
-  Loader2,
   PenLine,
   Archive,
   Eye,
-  Upload,
-  FolderOpen,
 } from 'lucide-react';
 import { useApp } from '@/providers/AppProvider';
-import { useToast } from '@/providers/ToastProvider';
 import {
-  useAsyncAction,
   useAttachmentService,
   useCan,
-  useFolderService,
   useRequest,
 } from '@/hooks';
 import {
@@ -35,13 +29,13 @@ import {
   resolveStatusMeta,
 } from '@/lib/constants';
 import { renderTemplate } from '@/lib/template';
+import ArchiveRequestDialog from '@/components/ArchiveRequestDialog';
 import type {
   Document,
   Request,
   ReviewDecision,
   TransmissionMethod,
 } from '@/services/contracts/models';
-import type { Folder } from '@/services/contracts/report';
 
 interface DocumentDetailModalProps {
   request: Request;
@@ -77,13 +71,10 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
     reviewDocument,
     signDocument,
     transmitDocument,
-    closeRequest,
-    refreshCounts,
     setRoutingSlipRequest,
     setWordPreviewRequest,
     lastError,
   } = useApp();
-  const toast = useToast();
 
   // The modal fetches its own fresh detail so mutations can refresh in place.
   const { data: detail, refresh } = useRequest(request.id);
@@ -105,23 +96,12 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
   const [receivedBy, setReceivedBy] = useState('');
   const [method, setMethod] = useState<TransmissionMethod>('PICKUP');
 
-  const {
-    getRequestAttachmentDownload,
-    getDocumentAttachmentDownload,
-    uploadDocumentAttachment,
-  } = useAttachmentService();
-  const { list: listFolders } = useFolderService();
-  const loadFoldersAction = useAsyncAction(listFolders);
-  const uploadFinalAction = useAsyncAction(uploadDocumentAttachment);
-  const canUpload = useCan('AttachmentService:Upload');
+  const { getRequestAttachmentDownload, getDocumentAttachmentDownload } =
+    useAttachmentService();
 
-  // Step 6 close flow state.
+  // Step 6 close flow: the shared dialog owns the form (same one the archive
+  // desk opens), so the dossier only tracks whether it is open.
   const [closeOpen, setCloseOpen] = useState(false);
-  const [finalAttachmentId, setFinalAttachmentId] = useState<string | null>(null);
-  const [folderId, setFolderId] = useState('');
-  const [closeNotes, setCloseNotes] = useState('');
-  const [closeError, setCloseError] = useState<string | null>(null);
-  const [folders, setFolders] = useState<Folder[]>([]);
 
   const selectedDoc: Document | null =
     documents.find((d) => d.id === selectedDocId) ?? documents[0] ?? null;
@@ -129,8 +109,6 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
   const documentAttachmentRows = documents.flatMap((doc) =>
     (doc.attachments ?? []).map((att) => ({ att, doc })),
   );
-  const existingSignedFinal =
-    documentAttachmentRows.find((row) => row.att.kind === 'SIGNED_FINAL') ?? null;
 
   const requestMeta = resolveStatusMeta(REQUEST_STATUS_META, dossier.status);
   const priorityLabel = REQUEST_PRIORITY_LABELS[dossier.priority] ?? dossier.priority;
@@ -224,65 +202,6 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
       setReceivingOffice('');
       setReceivedBy('');
       refresh();
-    }
-  };
-
-  const openClosePanel = () => {
-    setCloseError(null);
-    setFinalAttachmentId(null);
-    setFolderId('');
-    setCloseNotes('');
-    setCloseOpen(true);
-    void loadFoldersAction.run(null).then((loaded) => setFolders(loaded ?? []));
-  };
-
-  const handleSignedFinalFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    e.target.value = '';
-    if (!file) return;
-    if (!selectedDoc) {
-      setCloseError('No linked document is available to attach the signed final copy.');
-      return;
-    }
-    setCloseError(null);
-    const uploaded = await uploadFinalAction.run({
-      documentId: selectedDoc.id,
-      kind: 'SIGNED_FINAL',
-      file,
-    });
-    if (uploaded) {
-      setFinalAttachmentId(uploaded.id);
-      toast.success(`Signed final copy of ${selectedDoc.controlNo} attached.`);
-    } else {
-      const message = uploadFinalAction.getError()?.message ?? 'Unable to upload the signed final copy.';
-      setCloseError(message);
-      toast.error(message);
-    }
-  };
-
-  const runClose = async () => {
-    const effectiveFinalId = finalAttachmentId ?? existingSignedFinal?.att.id ?? null;
-    if (!effectiveFinalId) {
-      setCloseError(
-        'A signed final copy is required before closing this request. Upload it above, then close.',
-      );
-      return;
-    }
-    setBusy(true);
-    setCloseError(null);
-    const result = await closeRequest({
-      requestId: dossier.id,
-      finalAttachmentId: effectiveFinalId,
-      folderId: folderId ? folderId : null,
-      notes: closeNotes.trim() ? closeNotes.trim() : null,
-    });
-    setBusy(false);
-    if (result) {
-      setCloseOpen(false);
-      refresh();
-      refreshCounts();
-    } else {
-      setCloseError(lastError?.message ?? 'The request could not be closed. Please try again.');
     }
   };
 
@@ -764,7 +683,7 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
 
             {canClose && dossier.status !== 'CLOSED' && (
               <button
-                onClick={openClosePanel}
+                onClick={() => setCloseOpen(true)}
                 disabled={busy}
                 className="btn-fluid flex items-center gap-1 px-3 py-1.5 bg-[#475569] hover:bg-[#334155] text-white rounded text-xs font-bold cursor-pointer shadow-sm disabled:opacity-50"
               >
@@ -891,129 +810,16 @@ export default function DocumentDetailModal({ request, onClose }: DocumentDetail
         </div>
       )}
 
-      {/* Step 6: Close & Archive */}
+      {/* Step 6: Close & Archive - the SAME dialog the archive desk opens
+          (FR-29..31). It is portalled to body on its own, which is what keeps
+          it out of this panel's animated/overflow-hidden containing block. */}
       {closeOpen && (
-        <div className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-5 max-w-md w-full shadow-2xl border border-[#475569]">
-            <div className="flex items-center gap-2 mb-2">
-              <FolderOpen size={16} className="text-[#081E36]" />
-              <h3 className="font-bold text-sm text-[#0F172A] uppercase">
-                Close & Archive Request (Step 6)
-              </h3>
-            </div>
-            <p className="text-xs text-[#64748B] mb-4">
-              Upload the signed final copy and file the request into the archive. Closing marks the
-              dossier read-only.
-            </p>
-
-            {closeError && (
-              <div className="p-3 mb-4 bg-[#F1F5F9] border border-[#334155] rounded text-xs text-[#0F172A] font-semibold">
-                {closeError}
-              </div>
-            )}
-
-            <div className="space-y-3 mb-4 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
-                  Signed final copy (SIGNED_FINAL) *
-                </label>
-                {existingSignedFinal && (
-                  <div className="mb-1.5 text-[10px] text-[#15803D] font-semibold inline-flex items-center gap-1">
-                    <Paperclip size={11} />
-                    <span className="truncate max-w-[16rem]">
-                      On file: {existingSignedFinal.att.originalName} ({existingSignedFinal.doc.controlNo})
-                    </span>
-                  </div>
-                )}
-                {finalAttachmentId && (
-                  <div className="mb-1.5 text-[10px] text-[#15803D] font-semibold inline-flex items-center gap-1">
-                    <Paperclip size={11} />
-                    <span>New signed final copy uploaded and ready to file.</span>
-                  </div>
-                )}
-                {canUpload ? (
-                  <label
-                    className="btn-fluid inline-flex items-center gap-1 px-3 py-1.5 bg-[#081E36] hover:bg-[#0B2545] text-white rounded text-[11px] font-semibold cursor-pointer shadow-xs transition-colors"
-                    title="Upload the signed final copy (PDF or image)"
-                  >
-                    {uploadFinalAction.isPending ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Upload size={12} />
-                    )}
-                    <span>Upload signed final copy</span>
-                    <input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      className="hidden"
-                      disabled={uploadFinalAction.isPending}
-                      onChange={handleSignedFinalFile}
-                    />
-                  </label>
-                ) : (
-                  <span className="text-[10px] font-semibold text-[#64748B]">
-                    Upload not permitted for your account.
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
-                  Archive folder
-                </label>
-                {loadFoldersAction.isPending ? (
-                  <div className="text-[10px] text-[#64748B] inline-flex items-center gap-1">
-                    <Loader2 size={11} className="animate-spin" />
-                    <span>Loading archive folders...</span>
-                  </div>
-                ) : (
-                  <select
-                    value={folderId}
-                    onChange={(e) => setFolderId(e.target.value)}
-                    className="w-full p-2 border border-[#CBD5E1] rounded focus:outline-none focus:border-[#475569] bg-white text-[#0F172A]"
-                  >
-                    <option value="">Unfiled (archive root)</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.path}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-[#64748B] mb-1">
-                  Closing notes (optional)
-                </label>
-                <textarea
-                  value={closeNotes}
-                  onChange={(e) => setCloseNotes(e.target.value)}
-                  rows={3}
-                  placeholder="e.g. Concluded; signed final copy filed for permanent retention."
-                  className="w-full p-2.5 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#475569]"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setCloseOpen(false)}
-                className="btn-fluid px-3 py-1.5 border border-[#CBD5E1] rounded text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={runClose}
-                disabled={busy}
-                className="btn-fluid px-3.5 py-1.5 bg-[#475569] hover:bg-[#334155] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                {busy ? <Loader2 size={13} className="animate-spin" /> : <Archive size={13} />}
-                <span>Close & Archive</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ArchiveRequestDialog
+          request={dossier}
+          documentId={selectedDoc?.id ?? null}
+          onClose={() => setCloseOpen(false)}
+          onClosed={() => refresh()}
+        />
       )}
     </div>
   );

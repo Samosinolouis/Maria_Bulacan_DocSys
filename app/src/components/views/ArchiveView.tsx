@@ -14,9 +14,6 @@ import {
   Plus,
   RotateCcw,
   Archive,
-  Upload,
-  FileCheck2,
-  AlertCircle,
   Eye,
 } from 'lucide-react';
 import {
@@ -25,7 +22,6 @@ import {
   useDocumentTypes,
   useFolderService,
   useAsyncAction,
-  useAttachmentService,
   useCan,
   useRequests,
   useRequestService,
@@ -34,9 +30,18 @@ import { DOCUMENT_STATUS_META, REQUEST_STATUS_META, resolveStatusMeta } from '@/
 import { useToast } from '@/providers/ToastProvider';
 import { useApp } from '@/providers/AppProvider';
 import Portal from '@/components/Portal';
+import ArchiveRequestDialog from '@/components/ArchiveRequestDialog';
 import type { Document, Request } from '@/services/contracts/models';
 import type { Folder as FolderNode } from '@/services/contracts/report';
 import HighlightMatch from '@/components/HighlightMatch';
+
+/**
+ * Requests that belong on the pending-archival desk: concluded (approved,
+ * endorsed, denied) or already dispatched. Transmission (Step 5) is optional,
+ * so a fulfilled request is filed without a dispatch record - the desk must not
+ * wait for one.
+ */
+const PENDING_ARCHIVAL_STATUSES = ['APPROVED', 'ENDORSED', 'DENIED', 'TRANSMITTED'] as const;
 
 interface Crumb {
   id: string | null;
@@ -65,17 +70,17 @@ export default function ArchiveView() {
   const createAction = useAsyncAction(create);
   const toast = useToast();
 
-  // Step 6 (FR-29..31): the clerk files a transmitted request here - the action
+  // Step 6 (FR-29..31): the clerk files a concluded request here - the action
   // lives on the request row, the destination is the folder they opened.
-  const { closeRequest, refreshCounts, lastError, setSelectedRequest } = useApp();
+  const { refreshCounts, setSelectedRequest } = useApp();
   const { getById } = useRequestService();
-  const { uploadDocumentAttachment } = useAttachmentService();
-  const uploadFinalAction = useAsyncAction(uploadDocumentAttachment);
+  // Desk-level gate. The engine denies a guarded action probed WITHOUT a
+  // resource, so the check needs a representative one; the backend re-checks
+  // the real row on submit (NFR-07).
   const canClose = useCan('DocumentService:Close', {
     kind: 'request',
-    attributes: { status: 'TRANSMITTED' },
+    attributes: { status: PENDING_ARCHIVAL_STATUSES[0] },
   });
-  const canUploadAttachment = useCan('AttachmentService:Upload');
   const canReadRequests = useCan('RequestService:Read');
 
   // Navigation trail: root (null) -> current folder.
@@ -100,16 +105,17 @@ export default function ArchiveView() {
   } = useFolderDocuments(current.id, searchQuery);
   const { data: documentTypes } = useDocumentTypes();
 
-  // Requests whose transmission is recorded and whose file is not yet closed.
+  // Concluded requests whose file is not closed yet (FR-29..31). Transmission
+  // is optional, so this is a status UNION rather than TRANSMITTED alone.
   const {
-    data: transmittedData,
-    isLoading: transmittedLoading,
-    refresh: refreshTransmitted,
-  } = useRequests({ first: 100, filter: { status: 'TRANSMITTED' } });
+    data: pendingData,
+    isLoading: pendingLoading,
+    refresh: refreshPending,
+  } = useRequests({ first: 100, filter: { statusIn: [...PENDING_ARCHIVAL_STATUSES] } });
 
   const folders = foldersData ?? [];
   const documents = docsData ?? [];
-  const transmitted = transmittedData?.edges.map((edge) => edge.node) ?? [];
+  const pending = pendingData?.edges.map((edge) => edge.node) ?? [];
 
   const typeName = useMemo(() => {
     const map = new Map((documentTypes ?? []).map((t) => [t.id, t.name]));
@@ -141,89 +147,20 @@ export default function ArchiveView() {
     }
   };
 
-  // --- Step 6: archive a transmitted request (close + file) -----------------
+  // --- Step 6: archive a concluded request (close + file) -------------------
+  // The dialog owns the whole close flow; the desk only decides which request
+  // it is open for and refreshes its listings afterwards.
   const [archiveTarget, setArchiveTarget] = useState<Request | null>(null);
-  const [archiveDetail, setArchiveDetail] = useState<Request | null>(null);
-  const [archiveLoading, setArchiveLoading] = useState(false);
-  const [archiveNotes, setArchiveNotes] = useState('');
-  const [archiveFinalId, setArchiveFinalId] = useState<string | null>(null);
-  const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [archiveBusy, setArchiveBusy] = useState(false);
 
-  /** The document the signed final copy belongs to (FR-29). */
-  const archiveDocumentId = archiveDetail?.documents?.[0]?.id ?? null;
-  const archiveSignedFinalName =
-    archiveDetail?.documents
-      ?.flatMap((doc) => doc.attachments ?? [])
-      .find((attachment) => attachment.id === archiveFinalId)?.originalName ?? null;
-
-  const openArchive = async (request: Request) => {
+  const openArchive = (request: Request) => {
     setArchiveTarget(request);
-    setArchiveDetail(null);
-    setArchiveNotes('');
-    setArchiveFinalId(null);
-    setArchiveError(null);
-    setArchiveLoading(true);
-    try {
-      const detail = await getById(request.id);
-      setArchiveDetail(detail);
-      const final =
-        detail?.documents
-          ?.flatMap((doc) => doc.attachments ?? [])
-          .find((attachment) => attachment.kind === 'SIGNED_FINAL') ?? null;
-      setArchiveFinalId(final?.id ?? null);
-    } catch {
-      setArchiveError('Unable to load this request. Close the panel and try again.');
-    } finally {
-      setArchiveLoading(false);
-    }
   };
 
-  const handleFinalFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    e.target.value = '';
-    if (!file) return;
-    if (!archiveDocumentId) {
-      setArchiveError('No linked document is available to attach the signed final copy.');
-      return;
-    }
-    setArchiveError(null);
-    const uploaded = await uploadFinalAction.run({
-      documentId: archiveDocumentId,
-      kind: 'SIGNED_FINAL',
-      file,
-    });
-    if (uploaded) {
-      setArchiveFinalId(uploaded.id);
-      toast.success('Signed final copy attached.');
-    } else {
-      const message =
-        uploadFinalAction.getError()?.message ?? 'Unable to upload the signed final copy.';
-      setArchiveError(message);
-      toast.error(message);
-    }
-  };
-
-  const runArchive = async () => {
-    if (!archiveTarget || !current.id) return;
-    setArchiveBusy(true);
-    setArchiveError(null);
-    const result = await closeRequest({
-      requestId: archiveTarget.id,
-      finalAttachmentId: archiveFinalId,
-      folderId: current.id,
-      notes: archiveNotes.trim() ? archiveNotes.trim() : null,
-    });
-    setArchiveBusy(false);
-    if (result) {
-      setArchiveTarget(null);
-      refreshDocs();
-      refreshFolders();
-      refreshTransmitted();
-      refreshCounts();
-    } else {
-      setArchiveError(lastError?.message ?? 'The request could not be archived. Please try again.');
-    }
+  const handleArchived = () => {
+    refreshDocs();
+    refreshFolders();
+    refreshPending();
+    refreshCounts();
   };
 
   // --- View dossier: open the full request dossier for an archived record -----
@@ -269,7 +206,7 @@ export default function ArchiveView() {
   const refreshAll = () => {
     refreshFolders();
     refreshDocs();
-    refreshTransmitted();
+    refreshPending();
   };
 
   return (
@@ -556,7 +493,7 @@ export default function ArchiveView() {
         </div>
       )}
 
-      {/* Step 6: transmitted requests waiting to be filed into this folder */}
+      {/* Step 6: concluded requests waiting to be filed into this folder */}
       {!atRoot && canClose && canReadRequests && (
         <div className="bg-white rounded border border-[#CBD5E1] p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -565,22 +502,22 @@ export default function ArchiveView() {
               <span>Pending Archival</span>
             </h4>
             <span className="text-xs text-[#64748B]">
-              Transmitted requests are closed and filed into <strong>{current.name}</strong> here
+              Concluded requests are closed and filed into <strong>{current.name}</strong> here
               (FR-29..31)
             </span>
           </div>
 
-          {transmittedLoading ? (
+          {pendingLoading ? (
             <div className="text-center py-6">
               <Loader2 size={16} className="animate-spin inline-block text-[#081E36]" />
             </div>
-          ) : transmitted.length === 0 ? (
+          ) : pending.length === 0 ? (
             <div className="text-center py-6 text-[#64748B] text-xs">
               <div className="space-y-1.5 max-w-md mx-auto">
                 <div className="font-bold text-sm text-[#081E36]">Nothing awaiting archival</div>
                 <p className="text-[11px]">
-                  A request appears here once its transmission is recorded, and leaves once it is
-                  closed and filed.
+                  A request appears here once it is approved, endorsed, denied, or transmitted -
+                  transmission is optional - and leaves once it is closed and filed.
                 </p>
               </div>
             </div>
@@ -596,7 +533,7 @@ export default function ArchiveView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transmitted.map((request) => {
+                  {pending.map((request) => {
                     const meta = resolveStatusMeta(REQUEST_STATUS_META, request.status);
                     return (
                       <tr key={request.id}>
@@ -624,7 +561,7 @@ export default function ArchiveView() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => void openArchive(request)}
+                              onClick={() => openArchive(request)}
                               className="btn-fluid px-3 py-1 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
                               title={`Close ${request.controlNo} and file it into "${current.name}"`}
                             >
@@ -727,159 +664,15 @@ export default function ArchiveView() {
         </Portal>
       )}
 
-      {/* Archive & close dialog (Step 6: FR-29..31) */}
+      {/* Step 6: the ONE close form, shared with the dossier (FR-29..31) */}
       {archiveTarget && (
-        <Portal>
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#081E36]/40 p-4 overflow-y-auto">
-            <div className="w-full max-w-lg my-auto bg-white rounded-lg border border-[#CBD5E1] shadow-xl overflow-hidden animate-fluid-modal">
-              <div className="px-4 py-3 bg-[#081E36] text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Archive size={15} className="text-[#86EFAC]" />
-                  <span className="font-cinzel text-sm font-bold">ARCHIVE &amp; CLOSE REQUEST</span>
-                </div>
-                <button
-                  onClick={() => setArchiveTarget(null)}
-                  className="text-[#CBD5E1] hover:text-white cursor-pointer"
-                  title="Close"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-
-              <div className="p-4 space-y-4 text-xs">
-                <div className="p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded space-y-1 text-[11px] text-[#475569]">
-                  <div>
-                    Request:{' '}
-                    <strong className="font-mono text-[#081E36]">{archiveTarget.controlNo}</strong>{' '}
-                    - {archiveTarget.title}
-                  </div>
-                  <div>
-                    Destination folder: <strong className="text-[#081E36]">{current.name}</strong>
-                  </div>
-                </div>
-
-                {archiveLoading ? (
-                  <div className="text-center py-4">
-                    <Loader2 size={16} className="animate-spin inline-block text-[#081E36]" />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-bold text-[#081E36] uppercase tracking-wider">
-                      Output documents
-                    </div>
-                    <div className="border border-[#CBD5E1] rounded divide-y divide-[#E2E8F0]">
-                      {(archiveDetail?.documents ?? []).length === 0 ? (
-                        <div className="px-3 py-2 text-[11px] text-[#64748B]">
-                          This request has no linked document.
-                        </div>
-                      ) : (
-                        (archiveDetail?.documents ?? []).map((doc) => (
-                          <div key={doc.id} className="px-3 py-2 flex items-center justify-between">
-                            <span className="font-mono text-[11px] font-bold text-[#081E36]">
-                              {doc.controlNo}
-                            </span>
-                            <span className="text-[11px] text-[#475569]">
-                              {resolveStatusMeta(DOCUMENT_STATUS_META, doc.status).label}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="text-[11px] font-bold text-[#081E36] uppercase tracking-wider">
-                      Final signed copy (FR-29)
-                    </div>
-                    {archiveFinalId ? (
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#166534]">
-                        <FileCheck2 size={13} className="shrink-0" />
-                        <span className="truncate">
-                          {archiveSignedFinalName ?? 'Signed final copy attached'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded text-[11px] text-[#475569]">
-                        No signed final copy is attached to this request. Upload it to close the
-                        file.
-                      </div>
-                    )}
-                    {canUploadAttachment && (
-                      <label className="btn-fluid inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#334155] rounded text-xs font-semibold cursor-pointer">
-                        {uploadFinalAction.isPending ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Upload size={12} />
-                        )}
-                        <span>
-                          {archiveFinalId ? 'Replace signed final copy' : 'Attach signed final copy'}
-                        </span>
-                        <input
-                          type="file"
-                          accept="application/pdf,image/*"
-                          className="hidden"
-                          disabled={uploadFinalAction.isPending || !archiveDocumentId}
-                          onChange={handleFinalFile}
-                        />
-                      </label>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] font-bold text-[#081E36] mb-1">
-                    Archival notes (optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={archiveNotes}
-                    onChange={(e) => setArchiveNotes(e.target.value)}
-                    placeholder='e.g. "filed with the 2026 executive orders"'
-                    className="w-full px-3 py-2 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#15803D] text-[#0F172A]"
-                  />
-                </div>
-
-                {archiveError && (
-                  <div className="p-3 bg-[#F1F5F9] border border-[#334155] rounded text-xs font-semibold text-[#0F172A] flex items-start gap-1.5">
-                    <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                    <span>{archiveError}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="px-4 pb-4 flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-[10px] text-[#64748B] max-w-[16rem]">
-                  Closing marks the request CLOSED and every output document read-only.
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setArchiveTarget(null)}
-                    className="px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E2E8F0] border border-[#CBD5E1] text-[#334155] rounded text-xs font-semibold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void runArchive()}
-                    disabled={archiveBusy || archiveLoading || !archiveFinalId}
-                    title={
-                      archiveFinalId
-                        ? `Close ${archiveTarget.controlNo} and file it into "${current.name}"`
-                        : 'A signed final copy is required before closing (FR-29)'
-                    }
-                    className="px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
-                  >
-                    {archiveBusy ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Archive size={12} />
-                    )}
-                    <span>{archiveBusy ? 'Archiving...' : 'Archive & close'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Portal>
+        <ArchiveRequestDialog
+          request={archiveTarget}
+          defaultFolderId={current.id}
+          defaultFolderLabel={current.name}
+          onClose={() => setArchiveTarget(null)}
+          onClosed={handleArchived}
+        />
       )}
     </div>
   );
