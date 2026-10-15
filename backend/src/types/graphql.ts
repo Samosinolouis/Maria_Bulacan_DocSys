@@ -1053,6 +1053,12 @@ export type RequestFilterInput = {
   slaAtRisk?: InputMaybe<Scalars['Boolean']['input']>;
   slaOverdue?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<RequestStatus>;
+  /**
+   * Match any of these statuses (union). The archive desk uses it to list the
+   * concluded requests awaiting filing (APPROVED / ENDORSED / DENIED /
+   * TRANSMITTED) in one read. Ignored when empty.
+   */
+  statusIn?: InputMaybe<Array<RequestStatus>>;
 };
 
 export type RequestMutationPayload = {

@@ -75,6 +75,12 @@ type RequestConnection {
 
 input RequestFilterInput {
   status: RequestStatus
+  """
+  Match any of these statuses (union). The archive desk uses it to list the
+  concluded requests awaiting filing (APPROVED / ENDORSED / DENIED /
+  TRANSMITTED) in one read. Ignored when empty.
+  """
+  statusIn: [RequestStatus!]
   requestTypeId: ID
   originOffice: String
   priority: RequestPriority

@@ -16,7 +16,7 @@
  * [SOLID:DIP] Depends on IDatabase / IRepositories abstractions.
  */
 
-import { and, asc, desc, eq, gt, gte, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 
 import { config } from "../../config/index.js";
 import { requests } from "../../db/schema/index.js";
@@ -277,6 +277,9 @@ export class RequestService implements IRequestService {
     const now = new Date();
 
     if (filter.status) conditions.push(eq(requests.status, filter.status));
+    if (filter.statusIn?.length) {
+      conditions.push(inArray(requests.status, [...filter.statusIn]));
+    }
     if (filter.requestTypeId) {
       conditions.push(eq(requests.requestTypeId, filter.requestTypeId));
     }
