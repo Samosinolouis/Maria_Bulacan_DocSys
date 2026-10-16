@@ -138,12 +138,16 @@ export default function ArchiveRequestDialog({
       );
       return;
     }
+    if (!folderId) {
+      setError('Please select an archive folder before closing and archiving this request.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await closeRequest({
       requestId: dossier.id,
       finalAttachmentId,
-      folderId: folderId ? folderId : null,
+      folderId,
       notes: notes.trim() ? notes.trim() : null,
     });
     setBusy(false);
@@ -157,7 +161,8 @@ export default function ArchiveRequestDialog({
   };
 
   const destinationLabel =
-    folderOptions.find((row) => row.id === folderId)?.label ?? 'Unfiled (archive root)';
+    folderOptions.find((row) => row.id === folderId)?.label ??
+    (folderId ? folderId : 'None selected (folder required)');
 
   return (
     <Portal>
@@ -268,14 +273,17 @@ export default function ArchiveRequestDialog({
                 )}
 
                 <div className="text-[11px] font-bold text-[#081E36] uppercase tracking-wider">
-                  Archive folder
+                  Archive folder *
                 </div>
                 <select
                   value={folderId}
                   onChange={(e) => setFolderId(e.target.value)}
                   className="w-full px-3 py-2 border border-[#CBD5E1] rounded text-xs focus:outline-none focus:border-[#15803D] bg-white text-[#0F172A]"
+                  required
                 >
-                  <option value="">Unfiled (archive root)</option>
+                  <option value="" disabled>
+                    -- Select designated archive folder --
+                  </option>
                   {folderOptions.map((row) => (
                     <option key={row.id} value={row.id}>
                       {row.label}
@@ -322,11 +330,13 @@ export default function ArchiveRequestDialog({
               <button
                 type="button"
                 onClick={() => void runClose()}
-                disabled={busy || isLoading || !finalAttachmentId}
+                disabled={busy || isLoading || !finalAttachmentId || !folderId}
                 title={
-                  finalAttachmentId
-                    ? `Close ${dossier.controlNo} and file it into "${destinationLabel}"`
-                    : 'A signed final copy is required before closing (FR-29)'
+                  !finalAttachmentId
+                    ? 'A signed final copy is required before closing (FR-29)'
+                    : !folderId
+                    ? 'An archive folder is required before filing'
+                    : `Close ${dossier.controlNo} and file it into "${destinationLabel}"`
                 }
                 className="px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
               >
