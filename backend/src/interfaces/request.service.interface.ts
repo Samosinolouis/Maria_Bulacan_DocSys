@@ -35,6 +35,8 @@ export interface ScreenRequestInput {
 
 export interface RequestFilter {
   status?: RequestStatus | null;
+  /** Union filter: matches any of the listed statuses (empty = ignored). */
+  statusIn?: RequestStatus[] | null;
   requestTypeId?: string | null;
   originOffice?: string | null;
   priority?: RequestPriority | null;

@@ -133,6 +133,7 @@ Rules:
 3. **Reads** use `executeQueryWithCache`. **Mutations** do not use the cache except for invalidation.
 4. **Operation documents** live in `app/src/services/graphql/<domain>.ts` as exported constants. Services never inline GraphQL strings.
 5. **No React imports.** Services are plain TypeScript.
+6. **Mutations sanitize their input before the round trip.** Free-text fields go through `app/src/services/shared/sanitize.ts`: whitespace collapsed, markup and invisible control characters removed, and the column length the backend schema declares enforced (`sanitizeEncodeRequestInput` for Step 1, `sanitizeText` for any other field). A rejected field throws `AppError('VALIDATION', message)` naming the field, so the view reports it inline instead of failing at the database; the backend still re-validates (NFR-07).
 
 ---
 
@@ -225,8 +226,9 @@ export function authorizeOrThrow(
 1. **Login.** `login(returnTo)` redirects to Keycloak Authorization Code + PKCE (`KEYCLOAK_REALM_URL` + `/protocol/openid-connect/auth`). The return path is carried in `state`.
 2. **Callback.** `completeLogin()` reads the code from the URL, exchanges it at the token endpoint, stores the access and refresh tokens in memory (module scope, not localStorage), then calls `loadSession()`.
 3. **Bootstrap.** `loadSession()` runs the `SessionBootstrap` query (`me` with roles and `effectivePermissions`), builds `SessionSnapshot`, hands the `AuthzSubject` to `IAuthorizationEngine.setSubject()`, and notifies subscribers.
-4. **Token refresh.** Before expiry, refresh silently at the token endpoint. On refresh failure, clear the session and redirect to `/login`.
-5. **Logout.** Clear memory tokens, notify subscribers with `null`, redirect to Keycloak end-session.
+4. **Token refresh.** Before expiry, refresh silently at the token endpoint. A failed refresh is flagged on the session by the Auth.js jwt callback (`error: 'RefreshAccessTokenError'`); the route gate then calls `discard()` (clear the dead cookie + snapshot) and sends the user to `/login`, where the hand-off starts a fresh authorization request. The redirect alone is not enough - see [ROUTING.md](../ROUTING.md) route protection.
+5. **Discard.** `discard()` forgets the local session (cookie, token, snapshot, preview marker) WITHOUT ending the Keycloak SSO session, so a still-live IdP session answers the next authorization request silently. Single-flight: the route gate and the sign-in page both call it for the same broken session.
+6. **Logout.** Clear memory tokens, notify subscribers with `null`, redirect to Keycloak end-session (RP-initiated logout).
 
 Configuration (env):
 
@@ -260,6 +262,8 @@ Columns: **Contract method** -> GraphQL operation -> required action -> cache be
 | `screen` | `screenRequest(input)` | `RequestService:Screen` (guard: `RECEIVED`) | invalidate entity + metrics |
 | `resubmit` | `resubmitRequest(id)` | `RequestService:Screen` | invalidate entity + metrics |
 
+`encode` sanitizes its input first (`sanitizeEncodeRequestInput`): markup, invisible control characters and over-long values are rejected locally with `VALIDATION`, naming the offending field, before the mutation is issued.
+
 ### DocumentService
 
 | Method | GraphQL operation | Action | Cache |
@@ -274,7 +278,7 @@ Columns: **Contract method** -> GraphQL operation -> required action -> cache be
 | `review` | `reviewDocument(input)` | `DocumentService:Review` (guard: `UNDER_REVIEW`) | invalidate document + request + metrics |
 | `sign` | `signDocument(input)` | `DocumentService:Sign` (guard: `APPROVED`/`ENDORSED`, `signatoryRequired`) | invalidate document |
 | `transmit` | `transmitDocument(input)` | `DocumentService:Transmit` (guard: `APPROVED`/`ENDORSED`/`SIGNED`) | invalidate document + request |
-| `close` | `closeRequest(input)` | `DocumentService:Close` (guard: request `APPROVED`/`ENDORSED`/`DENIED`/`TRANSMITTED`) | invalidate request + linked documents |
+| `close` | `closeRequest(input)` | `DocumentService:Close` (guard: request `status !== 'CLOSED'`; transmission optional) | invalidate request + linked documents |
 
 ### AttachmentService
 

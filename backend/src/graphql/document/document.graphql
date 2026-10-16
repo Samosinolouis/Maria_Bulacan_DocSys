@@ -207,5 +207,10 @@ extend type Mutation {
   reviewDocument(input: ReviewDocumentInput!): DocumentMutationPayload!
   signDocument(input: SignDocumentInput!): DocumentMutationPayload!
   transmitDocument(input: TransmitDocumentInput!): DocumentMutationPayload!
+  """
+  Close a request and file its output documents into the archive (FR-29..31).
+  Transmission (Step 5) is optional: any open request can be closed once a
+  signed final copy exists.
+  """
   closeRequest(input: CloseRequestInput!): DocumentMutationPayload!
 }

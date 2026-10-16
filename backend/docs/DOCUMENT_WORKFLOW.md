@@ -181,7 +181,7 @@ Upload the final signed copy first: `POST /uploads/documents/:documentId` with `
 Transaction:
 
 1. `assertPermission(uow, actorId, 'DocumentService:Close')`.
-2. Guard: the request must be `APPROVED`, `ENDORSED`, `DENIED`, or `TRANSMITTED` (FR-30); a denied request may close directly without transmission.
+2. Guard: the request must not already be `CLOSED` (FR-30). Step 5 (transmission) is optional, so a request that is `APPROVED`, `ENDORSED`, or `DENIED` closes and files directly, without a dispatch record.
 3. Resolves the final copy (FR-29): the caller's `finalAttachmentId` must be a `SIGNED_FINAL` attachment belonging to one of the request's documents; otherwise the newest existing `SIGNED_FINAL` is used; otherwise `ValidationError` ("upload the final signed copy before closing").
 4. Optional archive filing (FR-29..31): when `folderId` is given, the folder must exist and every output document of the request is filed into it (`documents.folder_id`).
 5. Sets the request to `CLOSED` and appends the `CLOSED` audit entry (final attachment id + folder id/path when filed + notes).
@@ -212,7 +212,7 @@ Read-only enforcement (FR-31): every workflow mutation, both upload routes, and 
 | `DocumentService:Review` | document `UNDER_REVIEW` |
 | `DocumentService:Sign` | document `APPROVED` / `ENDORSED` and `signatoryRequired`; signatory = caller |
 | `DocumentService:Transmit` | document `APPROVED` / `ENDORSED` / `SIGNED`; signed when required |
-| `DocumentService:Close` | request `APPROVED` / `ENDORSED` / `DENIED` / `TRANSMITTED`; `SIGNED_FINAL` present |
+| `DocumentService:Close` | request not `CLOSED` (transmission optional); `SIGNED_FINAL` present |
 | `AttachmentService:Upload` | target exists; not `CLOSED` |
 | `AttachmentService:Download` | target attachment exists |
 | `UserService:Deactivate` | no self-deactivation (FR-03) |

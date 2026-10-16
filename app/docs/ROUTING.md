@@ -96,6 +96,7 @@ router.replace('/login');
 Protection is layered:
 
 1. **Session gate.** A client `SessionGate` inside the root layout checks `ISessionService.isAuthenticated()`. Unauthenticated users are redirected to `/login` (with the current path as the return target). `/login` and `/auth/callback` render outside the gate.
+   A session whose stored tokens are dead is the exception that needs more than a redirect: the Auth.js cookie still decrypts, so `useSession()` keeps reporting `authenticated` while the jwt callback flags the failure as `session.error`. The gate calls `ISessionService.discard()` (clear the cookie, drop the snapshot) before sending the user to `/login`, and `/login` refuses to bounce a session that carries an error. Without both halves the two pages evict the user to each other forever (`/dashboard` <-> `/login`).
 2. **Authorization gate.** Each view gates its controls through `useCan` / `useAuthorization` (see [AUTHORIZATION.md](./AUTHORIZATION.md)). A user without `DocumentService:Review` never sees the decision panel, but the backend would reject the mutation anyway.
 3. **Backend enforcement.** The only security boundary. Every operation is re-validated server-side (NFR-07).
 

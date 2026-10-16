@@ -23,17 +23,24 @@ const KEYCLOAK_BASE_URL =
 /**
  * Read the return target at call time rather than through `useSearchParams`,
  * which would force a Suspense fallback and empty the prerendered HTML.
+ *
+ * Anything that is not an in-app path is dropped (an absolute URL would be an
+ * open redirect) and `/login` is never accepted: returning to this page is a
+ * redirect loop.
  */
 function returnTarget(): string {
   if (typeof window === 'undefined') return '/dashboard';
-  return new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
+  const target = new URLSearchParams(window.location.search).get('returnTo');
+  if (!target || !target.startsWith('/') || target.startsWith('//') || target.startsWith('/login')) {
+    return '/dashboard';
+  }
+  return target;
 }
 
 function LoginDesk() {
   const router = useRouter();
   const { session: sessionService } = useServices();
-  const { status } = useSession();
-
+  const { status, data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [verifyingToken, setVerifyingToken] = useState(false);
@@ -73,11 +80,22 @@ function LoginDesk() {
       }
     }
 
-    // 2. If already authenticated, redirect to target
-    if (status === 'authenticated' || sessionService.isAuthenticated()) {
+    // 2. A session whose stored tokens are dead still reads as `authenticated`.
+    // Drop the unusable cookie so the visitor isn't trapped in an endless redirect loop.
+    if (status === 'authenticated') {
+      if (session?.error) {
+        void sessionService.discard().catch(() => null);
+        return;
+      }
+      router.replace(returnTarget());
+      return;
+    }
+
+    // 3. If already authenticated via local token / snapshot, redirect to target
+    if (sessionService.isAuthenticated()) {
       router.replace(returnTarget());
     }
-  }, [status, router, sessionService]);
+  }, [status, session?.error, router, sessionService]);
 
   const handleRedirectToKeycloak = () => {
     setIsAuthenticating(true);

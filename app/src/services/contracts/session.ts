@@ -58,6 +58,15 @@ export interface ISessionService {
   /** Complete the OIDC callback (token exchange), then load `me`. */
   completeLogin(): Promise<SessionSnapshot>;
 
+  /**
+   * Drop a session that can no longer be used (its stored tokens are dead)
+   * WITHOUT ending the Keycloak SSO session: clears the local Auth.js cookie
+   * and the in-memory snapshot, leaving the sign-in page free to start a fresh
+   * authorization request. Used when Auth.js still reports `authenticated` for
+   * a session whose refresh-token grant failed.
+   */
+  discard(): Promise<void>;
+
   /** Clear the session and redirect to Keycloak logout. */
   logout(): Promise<void>;
 

@@ -157,7 +157,7 @@ The full DocSys rule set:
 | `DocumentService:Review` | `attr('status') === 'UNDER_REVIEW'` | "Only documents under review can be decided." | FR-21, FR-22 |
 | `DocumentService:Sign` | `attr('status')` in `APPROVED`, `ENDORSED` AND `attr('signatoryRequired') === true` | "This document is not awaiting a signature." | FR-25 |
 | `DocumentService:Transmit` | `attr('status')` in `APPROVED`, `ENDORSED`, `SIGNED` | "Only approved, endorsed, or signed documents can be transmitted." | FR-26..28 |
-| `DocumentService:Close` | `attr('status')` in `APPROVED`, `ENDORSED`, `DENIED`, `TRANSMITTED` | "This request is not in a closable state." | FR-30 |
+| `DocumentService:Close` | `attr('status') !== 'CLOSED'` (transmission is optional, so any open status may close) | "This request is already closed and read-only." | FR-30 |
 | `EventService:Update` | `attr('status') !== 'CANCELLED'` | "Cancelled events cannot be edited." | FR-41 |
 | `EventService:Cancel` | `attr('status') !== 'CANCELLED'` | "This event is already cancelled." | FR-41 |
 | `EventService:Create` | none; `requiresWhen: (ctx) => ctx.resource?.attributes.venueSpecialUse === true ? ['EventService:BookSpecialVenue'] : []` | (extra grant checked with the standard reason) | FR-41 |

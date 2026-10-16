@@ -749,6 +749,14 @@ export interface ISessionService {
   /** Complete the OIDC callback (token exchange), then load `me`. */
   completeLogin(): Promise<SessionSnapshot>;
 
+  /**
+   * Drop a session that can no longer be used (its stored tokens are dead)
+   * WITHOUT ending the Keycloak SSO session: clears the local Auth.js cookie
+   * and the in-memory snapshot, leaving the sign-in page free to start a fresh
+   * authorization request.
+   */
+  discard(): Promise<void>;
+
   /** Clear the session and redirect to Keycloak logout. */
   logout(): Promise<void>;
 
@@ -795,6 +803,8 @@ export interface ScreenRequestInput {
 
 export interface RequestFilter {
   status?: Request['status'] | null;
+  /** Union filter: matches any of the listed statuses (empty = ignored). */
+  statusIn?: Request['status'][] | null;
   requestTypeId?: string | null;
   originOffice?: string | null;
   priority?: RequestPriority | null;
@@ -876,6 +886,8 @@ export interface CloseRequestInput {
   requestId: string;
   /** SIGNED_FINAL attachment id, required before closing (FR-29). */
   finalAttachmentId?: string | null;
+  /** Optional archive folder; every document of the request is filed into it. */
+  folderId?: string | null;
   notes?: string | null;
 }
 

@@ -452,6 +452,11 @@ export type Mutation = {
   assignRole: UserMutationPayload;
   /** Cancellation is a status change, never a delete. */
   cancelEvent: EventMutationPayload;
+  /**
+   * Close a request and file its output documents into the archive (FR-29..31).
+   * Transmission (Step 5) is optional: any open request can be closed once a
+   * signed final copy exists.
+   */
   closeRequest: DocumentMutationPayload;
   createDocumentType: DocumentTypeMutationPayload;
   createEvent: EventMutationPayload;
@@ -1048,6 +1053,12 @@ export type RequestFilterInput = {
   slaAtRisk?: InputMaybe<Scalars['Boolean']['input']>;
   slaOverdue?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<RequestStatus>;
+  /**
+   * Match any of these statuses (union). The archive desk uses it to list the
+   * concluded requests awaiting filing (APPROVED / ENDORSED / DENIED /
+   * TRANSMITTED) in one read. Ignored when empty.
+   */
+  statusIn?: InputMaybe<Array<RequestStatus>>;
 };
 
 export type RequestMutationPayload = {

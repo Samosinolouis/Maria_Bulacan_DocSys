@@ -10,8 +10,10 @@
  *              UNDER_REVIEW + request REVIEW
  * - FR-22..25  approve / endorse / deny (denial requires written grounds);
  *              record the Mayor signature event
- * - FR-26..28  transmission records + request -> TRANSMITTED
- * - FR-29..31  close from APPROVED/ENDORSED/DENIED/TRANSMITTED; read-only
+ * - FR-26..28  transmission records + request -> TRANSMITTED (Step 5 is
+ *              optional: a fulfilled request can be closed without it)
+ * - FR-29..31  close from any open status (signed final copy required);
+ *              read-only afterwards
  * - FR-39      exactly one immutable audit entry per state change, in-tx
  * - FR-47      workflow notifications (submitted-for-review, decisions)
  *
@@ -66,8 +68,12 @@ import {
 /** Documents can be transmitted only from these statuses (FR-26..28). */
 const TRANSMITTABLE_STATUSES = ["APPROVED", "ENDORSED", "SIGNED"] as const;
 
-/** A request is closable from these statuses (FR-30). */
-const CLOSABLE_REQUEST_STATUSES = ["APPROVED", "ENDORSED", "DENIED", "TRANSMITTED"] as const;
+/**
+ * Step 6 is reachable from ANY open request status: transmission (Step 5) is
+ * optional, so a fulfilled request (approved / endorsed / denied) is closed and
+ * filed without a dispatch record and only CLOSED is refused (FR-29..31). The
+ * signed final copy stays mandatory (resolveFinalAttachment, FR-29).
+ */
 
 export class DocumentService implements IDocumentService {
   constructor(
@@ -532,9 +538,9 @@ export class DocumentService implements IDocumentService {
 
       const request = await uow.requests.findById(input.requestId);
       if (!request) throw new NotFoundError("Request", input.requestId);
-      if (!(CLOSABLE_REQUEST_STATUSES as readonly string[]).includes(request.status)) {
+      if (request.status === "CLOSED") {
         throw new InvalidStateError(
-          `Request ${request.controlNo} is not in a closable state (status: ${request.status}).`,
+          `Request ${request.controlNo} is already closed (read-only, FR-31).`,
         );
       }
 
