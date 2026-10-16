@@ -93,6 +93,16 @@ function withMutationPayload(
         const value = await (resolver as (...a: unknown[]) => Promise<unknown>)(...args);
         return { result: value, changedEntities: getChangedEntities() };
       });
+      if (result && typeof result === "object" && entityField in result) {
+        const r = result as Record<string, unknown>;
+        const mergedEntities = Array.isArray(r.changedEntities)
+          ? Array.from(new Set([...changedEntities, ...(r.changedEntities as string[])]))
+          : changedEntities;
+        return {
+          ...r,
+          changedEntities: mergedEntities,
+        };
+      }
       return entityField === "count"
         ? { changedEntities, count: result ?? 0 }
         : { changedEntities, [entityField]: result };

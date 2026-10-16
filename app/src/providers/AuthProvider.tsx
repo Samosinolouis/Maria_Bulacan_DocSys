@@ -26,11 +26,12 @@ import { SessionContext } from './contexts';
  * server-only AUTH_KEYCLOAK_ISSUER / AUTH_KEYCLOAK_ID are not available here.
  * Both point at the same realm as `src/auth.ts` by default.
  */
-const KC_ISSUER = `${(process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'http://localhost:8080').replace(
-  /\/+$/,
-  '',
-)}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? 'docsys'}`;
+const KC_BASE = (
+  process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'https://santamaria-docsys-idp.azurewebsites.net'
+).replace(/\/+$/, '');
+const KC_REALM = process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? 'docsys';
 const KC_CLIENT_ID = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT ?? 'docsys-app';
+const KC_ISSUER = `${KC_BASE}/realms/${KC_REALM}`;
 
 /**
  * How often an open tab re-runs the OIDC refresh-token grant (minutes). Keep it
@@ -43,54 +44,55 @@ const SESSION_REFRESH_INTERVAL_MS =
 
 const authPort = {
   signIn: async (returnTo?: string) => {
-    try {
-      const res = await fetch('/api/auth/csrf');
-      const ct = res.headers.get('content-type') ?? '';
-      if (!res.ok || !ct.includes('application/json')) {
-        throw new Error('Keycloak OIDC identity provider is not reachable on this host.');
-      }
-    } catch {
-      throw new Error(
-        'Keycloak OIDC identity provider is not reachable on this host. For full authentication, please connect via the local backend stack or deploy the containerized services.',
-      );
+    if (typeof window !== 'undefined') {
+      const redirectUri = encodeURIComponent(`${window.location.origin}/login`);
+      const target = encodeURIComponent(returnTo ?? '/dashboard');
+      window.location.href = `${KC_ISSUER}/protocol/openid-connect/auth?client_id=${KC_CLIENT_ID}&response_type=token%20id_token&scope=openid%20profile%20email&redirect_uri=${redirectUri}&nonce=${Date.now()}&state=${target}`;
+      return;
     }
     await signIn('keycloak', { redirectTo: returnTo ?? '/dashboard' });
   },
   /**
-   * Sign out of BOTH the application and the identity provider.
-   *
-   * Auth.js `signOut` only clears its own session cookie. Keycloak keeps a
-   * separate SSO cookie for the realm, so after a plain signOut the next
-   * authorization request is answered silently from that cookie and the user is
-   * signed straight back in without being asked for credentials. The IdP session
-   * must be ended explicitly with an RP-initiated logout (OIDC RP-Initiated
-   * Logout 1.0): Keycloak's end-session endpoint is handed the `id_token` as
-   * `id_token_hint`, which identifies the session to terminate, plus the
-   * registered `post_logout_redirect_uri` to return to.
-   *
-   * Order matters: the hint is read while the session still exists, then the
-   * local cookie is cleared, then the browser is sent to Keycloak.
+   * Sign out of BOTH the application and the Keycloak identity provider.
    */
   signOut: async () => {
-    const session = await getSession();
-    const endSessionUrl = new URL(`${KC_ISSUER}/protocol/openid-connect/logout`);
-    if (session?.idToken) endSessionUrl.searchParams.set('id_token_hint', session.idToken);
-    // Sent alongside the hint so Keycloak can validate the redirect target even
-    // when the hint is unavailable (a session minted before it was persisted).
-    endSessionUrl.searchParams.set('client_id', KC_CLIENT_ID);
-    endSessionUrl.searchParams.set(
-      'post_logout_redirect_uri',
-      `${window.location.origin}/login`,
-    );
-
-    await signOut({ redirect: false });
-    window.location.href = endSessionUrl.toString();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('docsys_preview_user');
+        localStorage.removeItem('docsys_kc_token');
+        localStorage.removeItem('docsys_kc_id_token');
+        localStorage.removeItem('docsys_kc_user');
+        localStorage.removeItem('docsys_kc_exp');
+      } catch {}
+      const endSessionUrl = new URL(`${KC_ISSUER}/protocol/openid-connect/logout`);
+      endSessionUrl.searchParams.set('client_id', KC_CLIENT_ID);
+      endSessionUrl.searchParams.set(
+        'post_logout_redirect_uri',
+        `${window.location.origin}/login`,
+      );
+      try {
+        await signOut({ redirect: false });
+      } catch {}
+      window.location.href = endSessionUrl.toString();
+      return;
+    }
+    await signOut({ redirectTo: '/login' });
   },
   getSessionToken: async () => {
-    const session = await getSession();
-    return session
-      ? { accessToken: session.accessToken ?? null, expiresAt: session.expiresAt ?? null }
-      : null;
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('docsys_kc_token');
+      const expStr = localStorage.getItem('docsys_kc_exp');
+      const expiresAt = expStr ? Number(expStr) / 1000 : null;
+      if (token) return { accessToken: token, expiresAt };
+    }
+    try {
+      const session = await getSession();
+      return session
+        ? { accessToken: session.accessToken ?? null, expiresAt: session.expiresAt ?? null }
+        : null;
+    } catch {
+      return null;
+    }
   },
 };
 

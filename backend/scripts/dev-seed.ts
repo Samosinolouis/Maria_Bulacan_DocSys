@@ -102,6 +102,22 @@ const VENUES = [
   { code: "ADMIN_OFFICE", name: "Administrator's Office", specialUse: true },
 ];
 
+const REQUEST_TYPES = [
+  { code: "LETTER", name: "Incoming Communication / Letter", description: "Official letter or endorsement from citizens or agencies", prefix: "REQ" },
+  { code: "TRAVEL_ORDER", name: "Travel Order Request", description: "Official municipal travel authorization request", prefix: "TO" },
+  { code: "VENUE_REQ", name: "Venue Reservation Request", description: "Reservation of municipal halls and facilities", prefix: "VR" },
+  { code: "VEHICLE_REQ", name: "Vehicle Service Request", description: "Municipal motorpool logistics request", prefix: "VH" },
+  { code: "FOOD_REQ", name: "Food & Catering Request", description: "Official meeting meals and catering provision", prefix: "FD" },
+];
+
+const DOCUMENT_TYPES = [
+  { code: "TRAVEL_ORDER", name: "Travel Order", description: "Signed executive travel authorization", prefix: "TO" },
+  { code: "EXECUTIVE_ORDER", name: "Executive Order", description: "Official order promulgated by the Municipal Mayor", prefix: "EO" },
+  { code: "INDORSEMENT", name: "1st Indorsement Referral", description: "Formal referral to technical municipal offices", prefix: "IND" },
+  { code: "MEMO", name: "Memorandum Circular", description: "Administrative directive to municipal departments", prefix: "MC" },
+  { code: "REQUISITION", name: "Requisition & Issue Voucher (RIV)", description: "General services and procurement disbursement voucher", prefix: "RO" },
+];
+
 async function kcAdminToken(): Promise<string> {
   const res = await fetch(`${KC_URL}/realms/master/protocol/openid-connect/token`, {
     method: "POST",
@@ -207,6 +223,30 @@ async function main(): Promise<void> {
         console.log(`venue '${venue.code}' created`);
       } else {
         console.log(`venue '${venue.code}' exists`);
+      }
+    }
+
+    // 4. Request types (intake classifications).
+    for (const rt of REQUEST_TYPES) {
+      const existing = await sql`select id from app.request_types where code = ${rt.code}`;
+      if (existing.length === 0) {
+        await sql`insert into app.request_types (code, name, description, prefix, is_active)
+                  values (${rt.code}, ${rt.name}, ${rt.description}, ${rt.prefix}, true)`;
+        console.log(`request_type '${rt.code}' created`);
+      } else {
+        console.log(`request_type '${rt.code}' exists`);
+      }
+    }
+
+    // 5. Document types (preparation & dispatch classifications).
+    for (const dt of DOCUMENT_TYPES) {
+      const existing = await sql`select id from app.document_types where code = ${dt.code}`;
+      if (existing.length === 0) {
+        await sql`insert into app.document_types (code, name, description, prefix, is_active)
+                  values (${dt.code}, ${dt.name}, ${dt.description}, ${dt.prefix}, true)`;
+        console.log(`document_type '${dt.code}' created`);
+      } else {
+        console.log(`document_type '${dt.code}' exists`);
       }
     }
 

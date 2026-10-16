@@ -8,12 +8,11 @@
 
 import { AppError, type ServiceErrorCode } from '../contracts/errors';
 import type { GraphQLOperation, IGraphQLClient } from '../contracts/graphql';
-import { getFallbackGraphQLData } from './fallbackData';
 
 const DEFAULT_ENDPOINT =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
-  'http://localhost:4000/graphql';
+  'https://santamaria-docsys-api.azurewebsites.net/graphql';
 
 interface GraphQLResponse<T> {
   data?: T | null;
@@ -49,6 +48,7 @@ function mapHttpStatus(status: number): ServiceErrorCode {
 }
 
 const GENERIC_MESSAGE = 'Something went wrong. Please try again.';
+const REQUEST_TIMEOUT_MS = 15000;
 
 export class FetchGraphQLClient implements IGraphQLClient {
   constructor(
@@ -100,6 +100,15 @@ export class FetchGraphQLClient implements IGraphQLClient {
   ): Promise<{ data: TData; error: null } | { data: null; error: AppError }> {
     let res: Response;
     try {
+      let signal: AbortSignal | undefined;
+      try {
+        if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+          signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+        }
+      } catch {
+        // Fall back to no signal if environment lacks AbortSignal.timeout
+      }
+
       res = await fetch(this.endpoint, {
         method: 'POST',
         headers: {
@@ -112,20 +121,14 @@ export class FetchGraphQLClient implements IGraphQLClient {
           operationName: operation.operationName,
         }),
         cache: 'no-store',
+        signal,
       });
     } catch (cause) {
-      const fallback = getFallbackGraphQLData(
-        operation.operationName,
-        operation.variables as Record<string, unknown> | undefined,
-      );
-      if (fallback !== undefined) {
-        return { data: fallback as TData, error: null };
-      }
       return {
         data: null,
         error: new AppError(
           'NETWORK',
-          'The DocSys API is unreachable. Is the backend running?',
+          'The Santa Maria DocSys API is unreachable. Please verify your connection.',
           cause,
         ),
       };
@@ -142,13 +145,14 @@ export class FetchGraphQLClient implements IGraphQLClient {
       const code = mapped ?? mapHttpStatus(first.extensions?.status ?? res.status);
       // Structured, intentional errors carry a user-safe message; unstructured
       // failures get the generic one.
-      const message = first.extensions?.code ? first.message : GENERIC_MESSAGE;
+      const message = first.extensions?.code ? first.message : (first.message || GENERIC_MESSAGE);
       return { data: null, error: new AppError(code, message) };
     }
 
     if (json.data == null) {
       return { data: null, error: new AppError('UNKNOWN', GENERIC_MESSAGE) };
     }
+
     return { data: json.data, error: null };
   }
 }

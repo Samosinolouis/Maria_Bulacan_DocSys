@@ -1,59 +1,91 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useSessionServiceMethods } from '@/hooks/useDomainServices';
-import { ShieldCheck, Loader2, Lock, RotateCcw, UserCheck, AlertCircle, ExternalLink } from 'lucide-react';
+import { useServices } from '@/hooks/useServices';
+import {
+  ShieldCheck,
+  Loader2,
+  ExternalLink,
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react';
 import GovMasthead from '@/components/GovMasthead';
 import GovFooter from '@/components/GovFooter';
+
+const KEYCLOAK_BASE_URL =
+  process.env.NEXT_PUBLIC_KEYCLOAK_URL ||
+  'https://santamaria-docsys-idp.azurewebsites.net';
 
 /**
  * Read the return target at call time rather than through `useSearchParams`,
  * which would force a Suspense fallback and empty the prerendered HTML.
  */
 function returnTarget(): string {
+  if (typeof window === 'undefined') return '/dashboard';
   return new URLSearchParams(window.location.search).get('returnTo') ?? '/dashboard';
 }
 
 function LoginDesk() {
   const router = useRouter();
-  const { login, loginPreview } = useSessionServiceMethods();
+  const { session: sessionService } = useServices();
   const { status } = useSession();
+
   const [error, setError] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<'administrator' | 'clerk' | 'legal'>('administrator');
-  const started = useRef(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [verifyingToken, setVerifyingToken] = useState(false);
+  const [verifiedName, setVerifiedName] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wait for the session read: an already-authenticated visitor (for example
-    // one who followed a bookmarked /login link) must be returned to the app
-    // rather than sent through the identity provider again.
-    if (status === 'loading') return;
+    if (typeof window === 'undefined') return;
 
-    if (status === 'authenticated') {
-      router.replace(returnTarget());
-      return;
+    // 1. Process OIDC redirect from Keycloak (tokens returned in URL hash fragment)
+    if (window.location.hash) {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get('access_token');
+      const idToken = params.get('id_token');
+      if (accessToken) {
+        queueMicrotask(() => {
+          setVerifyingToken(true);
+          setIsAuthenticating(true);
+          try {
+            const snapshot = sessionService.loginFromToken(accessToken, idToken ?? undefined);
+            setVerifiedName(`${snapshot.user.firstName} ${snapshot.user.lastName}`);
+            window.history.replaceState(null, '', window.location.pathname);
+            const target = returnTarget();
+            setTimeout(() => {
+              router.replace(target);
+            }, 600);
+          } catch (err) {
+            setError(
+              'Failed to adopt Keycloak session: ' +
+                (err instanceof Error ? err.message : String(err)),
+            );
+            setVerifyingToken(false);
+            setIsAuthenticating(false);
+          }
+        });
+        return;
+      }
     }
 
-    // React strict mode runs effects twice in development; only the first pass
-    // may open an authorization request.
-    if (started.current) return;
-    started.current = true;
+    // 2. If already authenticated, redirect to target
+    if (status === 'authenticated' || sessionService.isAuthenticated()) {
+      router.replace(returnTarget());
+    }
+  }, [status, router, sessionService]);
 
-    login(returnTarget()).catch((err: unknown) => {
-      started.current = false;
-      setError(err instanceof Error ? err.message : 'Unable to reach the identity provider.');
-    });
-  }, [status, login, router]);
-
-  const handleRetry = () => {
+  const handleRedirectToKeycloak = () => {
+    setIsAuthenticating(true);
     setError(null);
-    started.current = false;
-    void login(returnTarget()).catch((err: unknown) => {
-      started.current = false;
-      setError(err instanceof Error ? err.message : 'Unable to reach the identity provider.');
-    });
+    const redirectUri = encodeURIComponent(`${window.location.origin}/login`);
+    const target = encodeURIComponent(returnTarget());
+    const authUrl = `${KEYCLOAK_BASE_URL}/realms/docsys/protocol/openid-connect/auth?client_id=docsys-app&response_type=token%20id_token&scope=openid%20profile%20email&redirect_uri=${redirectUri}&nonce=${Date.now()}&state=${target}`;
+    window.location.href = authUrl;
   };
 
   return (
@@ -123,148 +155,114 @@ function LoginDesk() {
 
             <div className="pt-6 border-t border-white/10 text-[10px] text-[#94A3B8] font-mono space-y-1">
               <div>IDENTITY: KEYCLOAK REALM [DOCSYS]</div>
-              <div>SECURITY: OIDC AUTHORIZATION CODE + PKCE</div>
+              <div>SECURITY: OIDC AUTHORIZATION CODE + PKCE / IMPLICIT</div>
               <div className="text-[#86EFAC] flex items-center gap-1.5 pt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse inline-block" />
-                <span>AZURE KEYCLOAK INSTANCE: ONLINE</span>
+                <span>AZURE KEYCLOAK OIDC: ONLINE (HTTPS)</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Civil Service Access Portal */}
+          {/* Right Column: Keycloak Authentication Desk */}
           <div className="w-full md:w-7/12 p-6 sm:p-8 bg-white flex flex-col justify-between">
-            <div>
-              <div className="border-b border-[#E2E8F0] pb-3 mb-6">
-                <span className="font-mono text-[10px] font-bold text-[#15803D] uppercase tracking-wider block">
-                  Official Civil Service Access
-                </span>
-                <h2 className="font-cinzel text-lg sm:text-xl font-bold text-[#081E36]">
-                  PERSONNEL AUTHENTICATION DESK
-                </h2>
-                <p className="text-xs text-[#64748B] mt-0.5">
-                  Authentication is mandatory. You are being handed to the municipality&apos;s
-                  Keycloak identity provider, which collects your credentials and enforces the
-                  password and multi-factor policy. Nothing is entered on this screen.
-                </p>
+            {verifyingToken ? (
+              /* State when returning from Keycloak */
+              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-[#F0FDF4] border-2 border-[#15803D] flex items-center justify-center text-[#15803D] animate-bounce">
+                  <CheckCircle2 size={32} />
+                </div>
+                <div>
+                  <h3 className="font-cinzel text-lg font-bold text-[#081E36]">
+                    Keycloak Identity Verified
+                  </h3>
+                  <p className="text-xs text-[#166534] font-medium mt-1">
+                    Admitting {verifiedName || 'Civil Service Personnel'} to municipal desk...
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#64748B]">
+                  <Loader2 size={16} className="animate-spin text-[#15803D]" />
+                  <span>Loading statutory docket and records repository...</span>
+                </div>
               </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-center py-6">
+                <div className="border-b border-[#E2E8F0] pb-4 mb-6">
+                  <span className="font-mono text-[10px] font-bold text-[#15803D] uppercase tracking-wider block">
+                    Official Keycloak Identity Provider (SSO)
+                  </span>
+                  <h2 className="font-cinzel text-xl sm:text-2xl font-bold text-[#081E36] mt-1">
+                    CIVIL SERVICE AUTHENTICATION
+                  </h2>
+                  <p className="text-xs text-[#64748B] mt-1.5 leading-relaxed">
+                    Access to the Santa Maria Municipal Document System is secured through official
+                    single sign-on. Authenticate directly via Keycloak to enter your authorized docket desk.
+                  </p>
+                </div>
 
-              {error ? (
-                <div className="space-y-4">
-                  <div className="p-3 bg-[#F0FDF4] border border-[#86EFAC] rounded text-xs text-[#0F172A] flex items-start gap-2.5">
-                    <ShieldCheck size={16} className="text-[#15803D] shrink-0 mt-0.5" />
+                {/* Status or Error Banner */}
+                {error && (
+                  <div className="mb-5 p-3.5 bg-[#FEF2F2] border border-[#FCA5A5] rounded text-xs text-[#991B1B] flex items-start gap-2.5 animate-shake">
+                    <AlertCircle size={16} className="text-[#DC2626] shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-bold text-[#15803D]">Azure Keycloak Identity Provider (OIDC Online)</div>
-                      <p className="text-[#334155] text-[11px] mt-0.5 leading-relaxed">
-                        Keycloak container is actively running on Azure at <span className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-[#CBD5E1] text-[#0F172A]">santamaria-docsys-idp.southeastasia.azurecontainer.io:8080</span> connected to Azure PostgreSQL. Authenticate below via your municipal plantilla account or explore the Keycloak administration console.
-                      </p>
+                      <div className="font-bold">Authentication Error</div>
+                      <p className="text-[11px] mt-0.5">{error}</p>
                     </div>
                   </div>
+                )}
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#081E36] uppercase tracking-wider mb-2">
-                      Select Municipal Plantilla Account
-                    </label>
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPersona('administrator')}
-                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
-                          selectedPersona === 'administrator'
-                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
-                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
-                        }`}
-                      >
-                        <div className="font-bold text-xs text-[#0F172A]">Engr. Elmer B. Clemente</div>
-                        <div className="text-[10px] text-[#166534] font-semibold">Municipal Administrator (Full Access - *:*)</div>
-                        <div className="text-[9px] text-[#64748B]">Office of the Municipal Administrator</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPersona('clerk')}
-                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
-                          selectedPersona === 'clerk'
-                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
-                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
-                        }`}
-                      >
-                        <div className="font-bold text-xs text-[#0F172A]">Sherelyn O. Libao</div>
-                        <div className="text-[10px] text-[#166534] font-semibold">Administrative Aide IV (Records Custodian)</div>
-                        <div className="text-[9px] text-[#64748B]">Central Receiving Desk - Docket Intake & Screening</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPersona('legal')}
-                        className={`w-full p-2.5 rounded border text-left cursor-pointer transition-all ${
-                          selectedPersona === 'legal'
-                            ? 'border-[#15803D] bg-[#F0FDF4] ring-1 ring-[#15803D]'
-                            : 'border-[#CBD5E1] bg-[#F8FAFC] hover:bg-white'
-                        }`}
-                      >
-                        <div className="font-bold text-xs text-[#0F172A]">Atty. Rodrigo Ramos</div>
-                        <div className="text-[10px] text-[#166534] font-semibold">Senior Legal Officer</div>
-                        <div className="text-[9px] text-[#64748B]">Municipal Legal Office - Indorsements & Legal Review</div>
-                      </button>
-                    </div>
-                  </div>
-
+                {/* PRIMARY ACTION: Sign In on Keycloak */}
+                <div className="my-4 space-y-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      loginPreview(selectedPersona);
-                      router.replace(returnTarget());
-                    }}
-                    className="btn-fluid w-full flex items-center justify-center gap-2 py-2.5 bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] text-white rounded text-xs font-bold shadow cursor-pointer"
+                    onClick={handleRedirectToKeycloak}
+                    disabled={isAuthenticating}
+                    className="w-full group relative flex items-center justify-between p-4 sm:p-5 bg-[#081E36] hover:bg-[#0B2545] active:bg-[#040F1D] text-white rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-60 border border-[#081E36]"
                   >
-                    <UserCheck size={14} />
-                    <span>Authenticate & Enter Civil Service Desk</span>
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-md bg-white/10 flex items-center justify-center text-[#86EFAC] group-hover:scale-105 transition-transform">
+                        {isAuthenticating ? (
+                          <Loader2 size={22} className="animate-spin" />
+                        ) : (
+                          <ShieldCheck size={24} />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm sm:text-base font-bold flex items-center gap-2 text-white">
+                          <span>Authenticate on Keycloak</span>
+                          <span className="px-1.5 py-0.5 bg-[#15803D] text-[9px] font-mono uppercase tracking-wider text-white rounded">
+                            Official OIDC
+                          </span>
+                        </div>
+                        <div className="text-xs text-[#94A3B8] mt-0.5">
+                          Single Sign-On (SSO) on Azure Identity Provider
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight size={20} className="text-[#86EFAC] group-hover:translate-x-1 transition-transform" />
                   </button>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <a
-                      href="http://santamaria-docsys-idp.southeastasia.azurecontainer.io:8080/admin/master/console/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#081E36] rounded text-[11px] font-semibold cursor-pointer transition-colors"
-                    >
-                      <ExternalLink size={13} className="text-[#15803D]" />
-                      <span>Keycloak Console</span>
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={handleRetry}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#475569] rounded text-[11px] font-semibold cursor-pointer transition-colors"
-                    >
-                      <RotateCcw size={13} />
-                      <span>Retry Keycloak SSO</span>
-                    </button>
-                  </div>
+                  <p className="text-xs text-[#64748B] text-center pt-1">
+                    You will be redirected to the secure Keycloak authentication portal.
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-4 text-xs">
-                  <div className="p-3.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded space-y-1.5">
-                    <div className="font-bold text-[#081E36] text-[11px] uppercase tracking-wider">
-                      Single Sign-On
-                    </div>
-                    <p className="text-[#475569] leading-relaxed">
-                      The Keycloak realm <strong>docsys</strong> issues this session. An existing
-                      municipal session is reused; otherwise you will be asked to sign in.
-                    </p>
-                  </div>
 
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#F0FDF4] border border-[#86EFAC] text-[#166534] rounded text-xs font-bold"
+                <div className="mt-8 pt-4 border-t border-[#E2E8F0] flex items-center justify-between text-[11px] text-[#64748B]">
+                  <a
+                    href="https://santamaria-docsys-idp.azurewebsites.net/admin/master/console/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-[#081E36] transition-colors"
                   >
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Redirecting to the municipal identity provider...</span>
-                  </div>
+                    <ExternalLink size={12} className="text-[#15803D]" />
+                    <span>Keycloak Admin Console</span>
+                  </a>
+
+                  <span className="font-mono text-[10px] text-[#94A3B8]">
+                    Realm: docsys · Azure Cloud
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="mt-6 pt-4 border-t border-[#E2E8F0] text-[11px] text-[#64748B] text-center">
               Civil Service Commission (CSC) and ARTA RA 11032 statutory compliance mandated.

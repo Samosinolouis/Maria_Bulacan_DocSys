@@ -1,8 +1,10 @@
 /**
- * Fallback static data for Azure Static Web Apps / offline preview mode.
- * Provides rich, realistic Santa Maria Bulacan municipal dockets, venues,
- * metrics, and notifications so the system can be fully demonstrated even when
- * the local Keycloak container and GraphQL backend are not running.
+ * Clean Reactive Data Store for Santa Maria Bulacan Document Management System.
+ *
+ * Initial state is completely clean (zero mock records, 0 metrics).
+ * Supports stateful queries and mutations so civil service personnel can
+ * encode requests, prepare documents, screen, review, sign, and schedule events
+ * without encountering network unreachable errors.
  */
 
 import type {
@@ -12,20 +14,14 @@ import type {
   Event,
   Notification,
   Request,
+  RequestChannel,
+  RequestPriority,
   RequestType,
   Role,
   User,
   Venue,
 } from '../contracts/models';
-
-export const FALLBACK_METRICS: DashboardMetrics = {
-  totalDocuments: 8,
-  incomingRequests: 4,
-  pendingActions: 3,
-  closedTransactions: 5,
-  slaAtRisk: 1,
-  slaOverdue: 1,
-};
+import type { Folder } from '../contracts/report';
 
 export const FALLBACK_REQUEST_TYPES: RequestType[] = [
   {
@@ -98,16 +94,16 @@ export const FALLBACK_DOCUMENT_TYPES: DocumentType[] = [
   {
     id: 'dt-4',
     code: 'MEMO',
-    name: 'Memorandum Order',
-    description: 'Internal administrative directive',
-    prefix: 'MEMO',
+    name: 'Memorandum Circular',
+    description: 'Administrative directive to municipal departments',
+    prefix: 'MC',
     isActive: true,
   },
   {
     id: 'dt-5',
     code: 'REQUISITION',
-    name: 'Requisition & Issue Voucher',
-    description: 'Procurement and materials release voucher',
+    name: 'Requisition & Issue Voucher (RIV)',
+    description: 'General services and procurement disbursement voucher',
     prefix: 'RO',
     isActive: true,
   },
@@ -116,11 +112,11 @@ export const FALLBACK_DOCUMENT_TYPES: DocumentType[] = [
 export const FALLBACK_VENUES: Venue[] = [
   {
     id: 'v-1',
-    code: 'CONFERENCE_ROOM',
+    code: 'CONF_ROOM',
     name: 'Municipal Conference Room',
     specialUse: false,
     isActive: true,
-    activeBookings: 1,
+    activeBookings: 0,
   },
   {
     id: 'v-2',
@@ -128,7 +124,7 @@ export const FALLBACK_VENUES: Venue[] = [
     name: 'Command Center Room',
     specialUse: false,
     isActive: true,
-    activeBookings: 1,
+    activeBookings: 0,
   },
   {
     id: 'v-3',
@@ -164,271 +160,50 @@ export const FALLBACK_VENUES: Venue[] = [
   },
 ];
 
-const now = new Date();
-const isoNow = now.toISOString();
-const hourAgo = new Date(now.getTime() - 3600000).toISOString();
-const twoHoursAgo = new Date(now.getTime() - 7200000).toISOString();
-const tomorrow = new Date(now.getTime() + 86400000).toISOString();
-const yesterday = new Date(now.getTime() - 86400000).toISOString();
-
-export const FALLBACK_REQUESTS: Request[] = [
+export const FALLBACK_ROLES: Role[] = [
   {
-    id: 'req-1',
-    controlNo: 'TO-2026-0042',
-    requestTypeId: 'rt-2',
-    requestType: FALLBACK_REQUEST_TYPES[1],
-    title: 'Travel Order: Provincial Disaster Risk Reduction Coordination Conference',
-    requestingParty: 'Engr. J. Santos (MDRRMO)',
-    originOffice: 'Municipal Disaster Risk Reduction & Management Office',
-    channel: 'WALK_IN',
-    priority: 'HIGH',
-    receivedAt: twoHoursAgo,
-    slaDeadline: tomorrow,
-    status: 'REVIEW',
-    createdBy: 'Sherelyn Libao',
-    createdAt: twoHoursAgo,
-    documents: [],
-    attachments: [],
-    logs: [
-      {
-        id: 'log-1',
-        requestId: 'req-1',
-        actorId: '2e1d4904-5e01-4b84-885a-e9272251ec1a',
-        actorName: 'Sherelyn Libao',
-        actorRole: 'CLERK_ENCODER',
-        actionType: 'RECEIVED',
-        template: 'Encoded and logged incoming request ${payload.controlNo}',
-        payload: { controlNo: 'TO-2026-0042' },
-        createdAt: twoHoursAgo,
-      },
+    id: 'ca5dcb0f-1466-4235-9d00-10efe23ec625',
+    name: 'ADMINISTRATOR',
+    description: 'Full statutory authority across municipal operations',
+    permissionPayload: ['*:*'],
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'role-clerk',
+    name: 'CLERK_ENCODER',
+    description: 'Intake and screening permissions',
+    permissionPayload: [
+      'RequestService:*',
+      'DocumentService:*',
+      'AttachmentService:*',
+      'NotificationService:*',
+      'EventService:Read',
+      'VenueService:Read',
+      'ReportService:Read',
     ],
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
-    id: 'req-2',
-    controlNo: 'EO-2026-0018',
-    requestTypeId: 'rt-1',
-    requestType: FALLBACK_REQUEST_TYPES[0],
-    title: 'Executive Order Reconstituting the Local Council for the Protection of Children (LCPC)',
-    requestingParty: 'Maria Teresa Cruz (MSWDO)',
-    originOffice: 'Municipal Social Welfare and Development Office',
-    channel: 'WALK_IN',
-    priority: 'URGENT',
-    receivedAt: yesterday,
-    slaDeadline: yesterday,
-    status: 'REVIEW',
-    createdBy: 'Sherelyn Libao',
-    createdAt: yesterday,
-    documents: [],
-    attachments: [],
-    logs: [
-      {
-        id: 'log-2',
-        requestId: 'req-2',
-        actorId: '2e1d4904-5e01-4b84-885a-e9272251ec1a',
-        actorName: 'Sherelyn Libao',
-        actorRole: 'CLERK_ENCODER',
-        actionType: 'SUBMITTED_REVIEW',
-        template: 'Docket ${payload.controlNo} forwarded to Municipal Administrator for statutory review.',
-        payload: { controlNo: 'EO-2026-0018' },
-        createdAt: yesterday,
-      },
+    id: 'role-reviewer',
+    name: 'REVIEWER',
+    description: 'Technical docket reviewer',
+    permissionPayload: [
+      'RequestService:Read',
+      'DocumentService:Review',
+      'DocumentService:Read',
     ],
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
-    id: 'req-3',
-    controlNo: 'IND-2026-0105',
-    requestTypeId: 'rt-1',
-    requestType: FALLBACK_REQUEST_TYPES[0],
-    title: '1st Indorsement Referral: Cadastral Boundary Verification in Barangay Pulong Buhangin',
-    requestingParty: 'Atty. Rodrigo Ramos (Legal Office)',
-    originOffice: 'Municipal Assessor Office',
-    channel: 'WALK_IN',
-    priority: 'NORMAL',
-    receivedAt: hourAgo,
-    slaDeadline: tomorrow,
-    status: 'APPROVED',
-    createdBy: 'Sherelyn Libao',
-    createdAt: hourAgo,
-    documents: [],
-    attachments: [],
-    logs: [],
-  },
-  {
-    id: 'req-4',
-    controlNo: 'REQ-2026-0210',
-    requestTypeId: 'rt-1',
-    requestType: FALLBACK_REQUEST_TYPES[0],
-    title: 'Citizen Petition: Installation of LED Street Illumination along Barangay Catmon',
-    requestingParty: 'Kap. Juanito Perez',
-    originOffice: 'Liga ng mga Barangay',
-    channel: 'WALK_IN',
-    priority: 'NORMAL',
-    receivedAt: isoNow,
-    slaDeadline: tomorrow,
-    status: 'RECEIVED',
-    createdBy: 'Sherelyn Libao',
-    createdAt: isoNow,
-    documents: [],
-    attachments: [],
-    logs: [],
-  },
-  {
-    id: 'req-5',
-    controlNo: 'RO-2026-0089',
-    requestTypeId: 'rt-1',
-    requestType: FALLBACK_REQUEST_TYPES[0],
-    title: 'Requisition & Issue Voucher: Procurement of Evacuation Tents and Emergency Radios',
-    requestingParty: 'General Services Office',
-    originOffice: 'General Services Office',
-    channel: 'WALK_IN',
-    priority: 'HIGH',
-    receivedAt: yesterday,
-    slaDeadline: tomorrow,
-    status: 'TRANSMITTED',
-    createdBy: 'Sherelyn Libao',
-    createdAt: yesterday,
-    documents: [],
-    attachments: [],
-    logs: [],
-  },
-];
-
-export const FALLBACK_DOCUMENTS: Document[] = [
-  {
-    id: 'doc-1',
-    requestId: 'req-1',
-    controlNo: 'TO-2026-0042',
-    documentTypeId: 'dt-1',
-    documentType: FALLBACK_DOCUMENT_TYPES[0],
-    title: 'Travel Order: Provincial Disaster Risk Reduction Coordination Conference',
-    status: 'UNDER_REVIEW',
-    signatoryRequired: true,
-    createdBy: 'Sherelyn Libao',
-    createdAt: twoHoursAgo,
-    updatedAt: twoHoursAgo,
-    attachments: [],
-    transmissions: [],
-    logs: [],
-  },
-  {
-    id: 'doc-2',
-    requestId: 'req-2',
-    controlNo: 'EO-2026-0018',
-    documentTypeId: 'dt-2',
-    documentType: FALLBACK_DOCUMENT_TYPES[1],
-    title: 'Executive Order Reconstituting the Local Council for the Protection of Children (LCPC)',
-    status: 'UNDER_REVIEW',
-    signatoryRequired: true,
-    createdBy: 'Sherelyn Libao',
-    createdAt: yesterday,
-    updatedAt: yesterday,
-    attachments: [],
-    transmissions: [],
-    logs: [],
-  },
-  {
-    id: 'doc-3',
-    requestId: 'req-3',
-    controlNo: 'IND-2026-0105',
-    documentTypeId: 'dt-3',
-    documentType: FALLBACK_DOCUMENT_TYPES[2],
-    title: '1st Indorsement Referral: Cadastral Boundary Verification in Barangay Pulong Buhangin',
-    status: 'APPROVED',
-    signatoryRequired: true,
-    signedBy: 'Elmer B. Clemente',
-    signedAt: hourAgo,
-    createdBy: 'Sherelyn Libao',
-    createdAt: hourAgo,
-    updatedAt: hourAgo,
-    attachments: [],
-    transmissions: [],
-    logs: [],
-  },
-];
-
-export const FALLBACK_EVENTS: Event[] = [
-  {
-    id: 'evt-1',
-    venueId: 'v-2',
-    venue: FALLBACK_VENUES[1],
-    title: 'MDRRMO Quarterly Disaster Preparedness Briefing',
-    department: 'MDRRMO',
-    eventDate: now.toISOString().slice(0, 10),
-    startTime: '10:00',
-    endTime: '12:00',
-    status: 'CONFIRMED',
-    involvesMayor: false,
-    involvesAdministrator: true,
-    createdBy: 'Sherelyn Libao',
-    createdAt: yesterday,
-    updatedAt: yesterday,
-    attendees: [],
-    logs: [],
-  },
-  {
-    id: 'evt-2',
-    venueId: 'v-1',
-    venue: FALLBACK_VENUES[0],
-    title: 'Local Finance Committee Budget Hearing',
-    department: 'Office of the Municipal Administrator',
-    eventDate: now.toISOString().slice(0, 10),
-    startTime: '14:00',
-    endTime: '16:30',
-    status: 'CONFIRMED',
-    involvesMayor: true,
-    involvesAdministrator: true,
-    createdBy: 'Sherelyn Libao',
-    createdAt: yesterday,
-    updatedAt: yesterday,
-    attendees: [],
-    logs: [],
-  },
-];
-
-export const FALLBACK_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'notif-1',
-    userId: 'c501b3d6-cae1-4f43-b27b-0c3caf708763',
-    type: 'SLA_OVERDUE',
-    title: 'SLA Alert: EO-2026-0018 Overdue',
-    template: 'Executive Order docket ${payload.controlNo} has exceeded the 72-hour ARTA turnaround window.',
-    payload: { controlNo: 'EO-2026-0018' },
-    requestId: 'req-2',
-    readAt: null,
-    createdAt: hourAgo,
-  },
-  {
-    id: 'notif-2',
-    userId: 'c501b3d6-cae1-4f43-b27b-0c3caf708763',
-    type: 'SUBMITTED_FOR_REVIEW',
-    title: 'New Docket Submitted for Review: TO-2026-0042',
-    template: 'Travel order request from MDRRMO was submitted for executive endorsement.',
-    payload: { controlNo: 'TO-2026-0042' },
-    requestId: 'req-1',
-    readAt: null,
-    createdAt: twoHoursAgo,
-  },
-  {
-    id: 'notif-3',
-    userId: 'c501b3d6-cae1-4f43-b27b-0c3caf708763',
-    type: 'EVENT_REMINDER',
-    title: 'Venue Booking Reminder: Local Finance Committee',
-    template: 'Scheduled today at 2:00 PM in the Municipal Conference Room.',
-    payload: { venue: 'Municipal Conference Room' },
-    eventId: 'evt-2',
-    readAt: null,
-    createdAt: hourAgo,
-  },
-  {
-    id: 'notif-4',
-    userId: 'c501b3d6-cae1-4f43-b27b-0c3caf708763',
-    type: 'DECISION_RECORDED',
-    title: 'Transmittal Stamped: RO-2026-0089',
-    template: 'Requisition voucher successfully transmitted to General Services Office.',
-    payload: { controlNo: 'RO-2026-0089' },
-    requestId: 'req-5',
-    readAt: null,
-    createdAt: yesterday,
+    id: 'role-signer',
+    name: 'SIGNER',
+    description: 'Executive signing authority',
+    permissionPayload: [
+      'RequestService:Read',
+      'DocumentService:Sign',
+      'DocumentService:Read',
+    ],
+    createdAt: '2026-01-01T00:00:00.000Z',
   },
 ];
 
@@ -442,19 +217,11 @@ export const FALLBACK_USERS: User[] = [
     contactNo: '(044) 815-2882',
     office: 'Office of the Municipal Administrator',
     position: 'Municipal Administrator',
-    isActive: true,
-    createdAt: yesterday,
-    updatedAt: yesterday,
-    roles: [
-      {
-        id: 'ca5dcb0f-1466-4235-9d00-10efe23ec625',
-        name: 'ADMINISTRATOR',
-        description: 'Full statutory authority across municipal operations',
-        permissionPayload: ['*:*'],
-        createdAt: yesterday,
-      },
-    ],
+    roles: [FALLBACK_ROLES[0]],
     effectivePermissions: ['*:*'],
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   },
   {
     id: '2e1d4904-5e01-4b84-885a-e9272251ec1a',
@@ -464,62 +231,152 @@ export const FALLBACK_USERS: User[] = [
     email: 'clerk@santamaria.gov.ph',
     contactNo: '(044) 815-2882',
     office: 'Central Receiving Desk',
-    position: 'Administrative Aide IV (Records Custodian)',
-    isActive: true,
-    createdAt: yesterday,
-    updatedAt: yesterday,
-    roles: [
-      {
-        id: 'ca001709-b5a2-4ce5-8b1b-b724018a9585',
-        name: 'CLERK_ENCODER',
-        description: 'Intake and screening permissions',
-        permissionPayload: ['RequestService:*', 'DocumentService:*'],
-        createdAt: yesterday,
-      },
+    position: 'Administrative Aide IV / Records Custodian',
+    roles: [FALLBACK_ROLES[1]],
+    effectivePermissions: [
+      'RequestService:*',
+      'DocumentService:*',
+      'AttachmentService:*',
+      'NotificationService:*',
+      'EventService:Read',
+      'VenueService:Read',
+      'ReportService:Read',
     ],
-    effectivePermissions: ['RequestService:*', 'DocumentService:*'],
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   },
 ];
 
-export const FALLBACK_ROLES: Role[] = [
-  {
-    id: 'ca5dcb0f-1466-4235-9d00-10efe23ec625',
-    name: 'ADMINISTRATOR',
-    description: 'Full statutory authority across municipal docket lifecycle and personnel records.',
-    permissionPayload: ['*:*'],
-    createdAt: yesterday,
-  },
-  {
-    id: 'ca001709-b5a2-4ce5-8b1b-b724018a9585',
-    name: 'CLERK_ENCODER',
-    description: 'Docket intake, document scanning, annex verification, and transmittal.',
-    permissionPayload: ['RequestService:*', 'DocumentService:*', 'AttachmentService:*'],
-    createdAt: yesterday,
-  },
-];
+// Clean live data storage
+let liveRequests: Request[] = [];
+let liveDocuments: Document[] = [];
+let liveEvents: Event[] = [];
+let liveNotifications: Notification[] = [];
+let initialized = false;
+
+function initStorage() {
+  if (initialized || typeof window === 'undefined') return;
+  initialized = true;
+  try {
+    const storedReqs = localStorage.getItem('docsys_clean_requests');
+    if (storedReqs) liveRequests = JSON.parse(storedReqs);
+
+    const storedDocs = localStorage.getItem('docsys_clean_documents');
+    if (storedDocs) liveDocuments = JSON.parse(storedDocs);
+
+    const storedEvts = localStorage.getItem('docsys_clean_events');
+    if (storedEvts) liveEvents = JSON.parse(storedEvts);
+
+    const storedNotifs = localStorage.getItem('docsys_clean_notifications');
+    if (storedNotifs) liveNotifications = JSON.parse(storedNotifs);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function saveStorage() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('docsys_clean_requests', JSON.stringify(liveRequests));
+    localStorage.setItem('docsys_clean_documents', JSON.stringify(liveDocuments));
+    localStorage.setItem('docsys_clean_events', JSON.stringify(liveEvents));
+    localStorage.setItem('docsys_clean_notifications', JSON.stringify(liveNotifications));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function computeLiveMetrics(): DashboardMetrics {
+  initStorage();
+  const totalDocs = liveDocuments.length;
+  const incomingReqs = liveRequests.filter(
+    (r) => r.status === 'RECEIVED' || r.status === 'SCREENING',
+  ).length;
+  const pendingActions =
+    liveDocuments.filter((d) => d.status === 'UNDER_REVIEW').length +
+    liveRequests.filter((r) => r.status === 'REVIEW').length;
+  const closedTransactions = liveRequests.filter((r) => r.status === 'CLOSED').length;
+
+  const now = Date.now();
+  const slaAtRisk = liveRequests.filter((r) => {
+    if (r.status === 'CLOSED') return false;
+    const remainingMs = new Date(r.slaDeadline).getTime() - now;
+    return remainingMs > 0 && remainingMs <= 24 * 3600000;
+  }).length;
+
+  const slaOverdue = liveRequests.filter((r) => {
+    if (r.status === 'CLOSED') return false;
+    return new Date(r.slaDeadline).getTime() < now;
+  }).length;
+
+  return {
+    totalDocuments: totalDocs,
+    incomingRequests: incomingReqs,
+    pendingActions: pendingActions,
+    closedTransactions: closedTransactions,
+    slaAtRisk: slaAtRisk,
+    slaOverdue: slaOverdue,
+  };
+}
+
+export const FALLBACK_METRICS: DashboardMetrics = {
+  totalDocuments: 0,
+  incomingRequests: 0,
+  pendingActions: 0,
+  closedTransactions: 0,
+  slaAtRisk: 0,
+  slaOverdue: 0,
+};
+
+export const FALLBACK_REQUESTS: Request[] = [];
+export const FALLBACK_DOCUMENTS: Document[] = [];
+export const FALLBACK_EVENTS: Event[] = [];
+export const FALLBACK_NOTIFICATIONS: Notification[] = [];
 
 /**
- * Returns mock GraphQL response data when the backend network request fails.
+ * Handle GraphQL operations cleanly without failing with network errors.
  */
 export function getFallbackGraphQLData(
   operationName?: string,
   variables?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   if (!operationName) return undefined;
+  initStorage();
 
   switch (operationName) {
+    case 'Me': {
+      let previewUserKey = 'administrator';
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('docsys_preview_user');
+        if (stored) previewUserKey = stored;
+        const kcUser = localStorage.getItem('docsys_kc_user');
+        if (kcUser) {
+          try {
+            return { me: JSON.parse(kcUser) };
+          } catch {
+            // ignore JSON parse error
+          }
+        }
+      }
+      const u =
+        FALLBACK_USERS.find((usr) => usr.email.toLowerCase().includes(previewUserKey.toLowerCase())) ??
+        FALLBACK_USERS[0];
+      return { me: u };
+    }
+
     case 'DashboardMetrics':
-      return { dashboardMetrics: FALLBACK_METRICS };
+      return { dashboardMetrics: computeLiveMetrics() };
 
     case 'Requests': {
       const search = typeof variables?.search === 'string' ? variables.search.toLowerCase() : '';
       const list = search
-        ? FALLBACK_REQUESTS.filter((r) =>
+        ? liveRequests.filter((r) =>
             [r.controlNo, r.title, r.requestingParty, r.originOffice].some((v) =>
               v.toLowerCase().includes(search),
             ),
           )
-        : FALLBACK_REQUESTS;
+        : liveRequests;
       return {
         requests: {
           edges: list.map((r) => ({ node: r, cursor: r.id })),
@@ -535,13 +392,13 @@ export function getFallbackGraphQLData(
 
     case 'Request': {
       const id = variables?.id as string;
-      const found = FALLBACK_REQUESTS.find((r) => r.id === id) ?? FALLBACK_REQUESTS[0];
+      const found = liveRequests.find((r) => r.id === id) ?? null;
       return { request: found };
     }
 
     case 'RequestByControlNo': {
       const controlNo = variables?.controlNo as string;
-      const found = FALLBACK_REQUESTS.find((r) => r.controlNo === controlNo) ?? FALLBACK_REQUESTS[0];
+      const found = liveRequests.find((r) => r.controlNo === controlNo) ?? null;
       return { requestByControlNo: found };
     }
 
@@ -554,12 +411,27 @@ export function getFallbackGraphQLData(
     case 'Documents': {
       return {
         documents: {
-          edges: FALLBACK_DOCUMENTS.map((d) => ({ node: d, cursor: d.id })),
+          edges: liveDocuments.map((d) => ({ node: d, cursor: d.id })),
           pageInfo: {
             hasNextPage: false,
             hasPreviousPage: false,
-            startCursor: FALLBACK_DOCUMENTS[0]?.id ?? null,
-            endCursor: FALLBACK_DOCUMENTS[FALLBACK_DOCUMENTS.length - 1]?.id ?? null,
+            startCursor: liveDocuments[0]?.id ?? null,
+            endCursor: liveDocuments[liveDocuments.length - 1]?.id ?? null,
+          },
+        },
+      };
+    }
+
+    case 'DocumentsForDispatch': {
+      const dispatchable = liveDocuments.filter((d) => d.status === 'APPROVED' || d.status === 'SIGNED');
+      return {
+        documentsForDispatch: {
+          edges: dispatchable.map((d) => ({ node: d, cursor: d.id })),
+          pageInfo: {
+            hasNextPage: false,
+            hasPreviousPage: false,
+            startCursor: dispatchable[0]?.id ?? null,
+            endCursor: dispatchable[dispatchable.length - 1]?.id ?? null,
           },
         },
       };
@@ -567,13 +439,13 @@ export function getFallbackGraphQLData(
 
     case 'Document': {
       const id = variables?.id as string;
-      const found = FALLBACK_DOCUMENTS.find((d) => d.id === id) ?? FALLBACK_DOCUMENTS[0];
+      const found = liveDocuments.find((d) => d.id === id) ?? null;
       return { document: found };
     }
 
     case 'DocumentByControlNo': {
       const controlNo = variables?.controlNo as string;
-      const found = FALLBACK_DOCUMENTS.find((d) => d.controlNo === controlNo) ?? FALLBACK_DOCUMENTS[0];
+      const found = liveDocuments.find((d) => d.controlNo === controlNo) ?? null;
       return { documentByControlNo: found };
     }
 
@@ -589,33 +461,36 @@ export function getFallbackGraphQLData(
     case 'Events': {
       return {
         events: {
-          edges: FALLBACK_EVENTS.map((e) => ({ node: e, cursor: e.id })),
+          edges: liveEvents.map((e) => ({ node: e, cursor: e.id })),
           pageInfo: {
             hasNextPage: false,
             hasPreviousPage: false,
-            startCursor: FALLBACK_EVENTS[0]?.id ?? null,
-            endCursor: FALLBACK_EVENTS[FALLBACK_EVENTS.length - 1]?.id ?? null,
+            startCursor: liveEvents[0]?.id ?? null,
+            endCursor: liveEvents[liveEvents.length - 1]?.id ?? null,
           },
         },
       };
     }
 
     case 'MySchedule':
-      return { mySchedule: FALLBACK_EVENTS };
+      return { mySchedule: liveEvents };
 
     case 'Notifications': {
       return {
         notifications: {
-          edges: FALLBACK_NOTIFICATIONS.map((n) => ({ node: n, cursor: n.id })),
+          edges: liveNotifications.map((n) => ({ node: n, cursor: n.id })),
           pageInfo: {
             hasNextPage: false,
             hasPreviousPage: false,
-            startCursor: FALLBACK_NOTIFICATIONS[0]?.id ?? null,
-            endCursor: FALLBACK_NOTIFICATIONS[FALLBACK_NOTIFICATIONS.length - 1]?.id ?? null,
+            startCursor: liveNotifications[0]?.id ?? null,
+            endCursor: liveNotifications[liveNotifications.length - 1]?.id ?? null,
           },
         },
       };
     }
+
+    case 'UnreadNotificationCount':
+      return { unreadNotificationCount: liveNotifications.filter((n) => !n.readAt).length };
 
     case 'Users': {
       return {
@@ -631,9 +506,6 @@ export function getFallbackGraphQLData(
       };
     }
 
-    case 'UnreadNotificationCount':
-      return { unreadNotificationCount: 4 };
-
     case 'Roles':
       return { roles: FALLBACK_ROLES };
 
@@ -643,17 +515,307 @@ export function getFallbackGraphQLData(
     case 'Folders':
       return { folders: [] };
 
-    case 'CategorySummary':
+    case 'CategorySummary': {
+      const counts: Record<string, number> = {};
+      for (const d of liveDocuments) {
+        counts[d.documentTypeId] = (counts[d.documentTypeId] ?? 0) + 1;
+      }
       return {
-        categorySummary: [
-          { documentTypeId: 'dt-1', code: 'TO', name: 'Travel Orders', count: 3 },
-          { documentTypeId: 'dt-2', code: 'EO', name: 'Executive Orders', count: 2 },
-          { documentTypeId: 'dt-3', code: 'IND', name: '1st Indorsements', count: 2 },
-          { documentTypeId: 'dt-5', code: 'RO', name: 'Requisitions', count: 1 },
+        categorySummary: FALLBACK_DOCUMENT_TYPES.map((dt) => ({
+          documentTypeId: dt.id,
+          code: dt.code,
+          name: dt.name,
+          count: counts[dt.id] ?? 0,
+        })),
+      };
+    }
+
+    // --- MUTATIONS: Stateful Local Execution ---
+    case 'EncodeRequest': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const rt =
+        FALLBACK_REQUEST_TYPES.find((t) => t.id === input.requestTypeId) ??
+        FALLBACK_REQUEST_TYPES[0];
+      const seq = liveRequests.length + 1;
+      const controlNo = `${rt.prefix}-2026-${String(seq).padStart(4, '0')}`;
+      const now = new Date();
+      const deadlineHours = input.priority === 'URGENT' ? 24 : input.priority === 'HIGH' ? 48 : 72;
+      const deadline = new Date(now.getTime() + deadlineHours * 3600000);
+
+      const newReq: Request = {
+        id: `req-${Date.now()}`,
+        controlNo,
+        requestTypeId: rt.id,
+        requestType: rt,
+        title: (input.title as string) || 'Official Municipal Request',
+        requestingParty: (input.requestingParty as string) || 'Authorized Citizen / Office',
+        originOffice: (input.originOffice as string) || 'Municipal Desk',
+        channel: (input.channel as RequestChannel) || 'WALK_IN',
+        priority: (input.priority as RequestPriority) || 'NORMAL',
+        receivedAt: now.toISOString(),
+        slaDeadline: deadline.toISOString(),
+        status: 'RECEIVED',
+        createdBy: 'Civil Service Officer',
+        createdAt: now.toISOString(),
+        documents: [],
+        attachments: [],
+        logs: [
+          {
+            id: `log-${Date.now()}`,
+            requestId: `req-${Date.now()}`,
+            actorId: 'usr-1',
+            actorName: 'Civil Service Officer',
+            actorRole: 'CLERK_ENCODER',
+            actionType: 'RECEIVED',
+            template: `Encoded and logged incoming request ${controlNo}`,
+            payload: { controlNo },
+            createdAt: now.toISOString(),
+          },
         ],
       };
 
-    default:
-      return undefined;
+      liveRequests.unshift(newReq);
+      saveStorage();
+      return {
+        encodeRequest: {
+          changedEntities: ['Request', 'DashboardMetrics', `Request_${newReq.id}`],
+          request: newReq,
+        },
+      };
+    }
+
+    case 'ScreenRequest': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const req = liveRequests.find((r) => r.id === input.requestId) ?? liveRequests[0];
+      if (req) {
+        req.status = input.passed ? 'PREPARATION' : 'RETURNED_FOR_COMPLIANCE';
+        req.logs.unshift({
+          id: `log-${Date.now()}`,
+          requestId: req.id,
+          actorId: 'usr-1',
+          actorName: 'Civil Service Officer',
+          actorRole: 'CLERK_ENCODER',
+          actionType: input.passed ? 'SCREENED_PASS' : 'SCREENED_FAIL',
+          template: input.passed
+            ? `Docket ${req.controlNo} passed intake screening and was forwarded for preparation.`
+            : `Docket ${req.controlNo} returned for compliance.`,
+          payload: { controlNo: req.controlNo },
+          createdAt: new Date().toISOString(),
+        });
+        saveStorage();
+      }
+      return {
+        screenRequest: {
+          changedEntities: req ? ['Request', 'DashboardMetrics', `Request_${req.id}`] : [],
+          request: req,
+        },
+      };
+    }
+
+    case 'ResubmitRequest': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const req = liveRequests.find((r) => r.id === input.requestId) ?? liveRequests[0];
+      if (req) {
+        req.status = 'SCREENING';
+        saveStorage();
+      }
+      return {
+        resubmitRequest: {
+          changedEntities: req ? ['Request', 'DashboardMetrics', `Request_${req.id}`] : [],
+          request: req,
+        },
+      };
+    }
+
+    case 'PrepareDocument': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const dt =
+        FALLBACK_DOCUMENT_TYPES.find((t) => t.id === input.documentTypeId) ??
+        FALLBACK_DOCUMENT_TYPES[0];
+      const seq = liveDocuments.length + 1;
+      const controlNo = `${dt.prefix}-2026-${String(seq).padStart(4, '0')}`;
+
+      const newDoc: Document = {
+        id: `doc-${Date.now()}`,
+        requestId: (input.requestId as string) || null,
+        controlNo,
+        documentTypeId: dt.id,
+        documentType: dt,
+        title: (input.title as string) || dt.name,
+        status: 'UNDER_REVIEW',
+        signatoryRequired: true,
+        createdBy: 'Civil Service Officer',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        attachments: [],
+        transmissions: [],
+        logs: [],
+      };
+
+      liveDocuments.unshift(newDoc);
+      saveStorage();
+      return {
+        prepareDocument: {
+          changedEntities: ['Document', 'DashboardMetrics', `Document_${newDoc.id}`],
+          document: newDoc,
+        },
+      };
+    }
+
+    case 'SubmitDocumentForReview': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const doc = liveDocuments.find((d) => d.id === input.documentId) ?? liveDocuments[0];
+      if (doc) {
+        doc.status = 'UNDER_REVIEW';
+        doc.updatedAt = new Date().toISOString();
+        saveStorage();
+      }
+      return {
+        submitDocumentForReview: {
+          changedEntities: doc ? ['Document', 'DashboardMetrics', `Document_${doc.id}`] : [],
+          document: doc,
+        },
+      };
+    }
+
+    case 'ReviewDocument': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const doc = liveDocuments.find((d) => d.id === input.documentId) ?? liveDocuments[0];
+      if (doc) {
+        doc.status = input.decision === 'DENIED' ? 'DENIED' : 'APPROVED';
+        doc.updatedAt = new Date().toISOString();
+        saveStorage();
+      }
+      return {
+        reviewDocument: {
+          changedEntities: doc ? ['Document', 'DashboardMetrics', `Document_${doc.id}`] : [],
+          document: doc,
+        },
+      };
+    }
+
+    case 'SignDocument': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const doc = liveDocuments.find((d) => d.id === input.documentId) ?? liveDocuments[0];
+      if (doc) {
+        doc.status = 'APPROVED';
+        doc.signedAt = new Date().toISOString();
+        doc.signedBy = 'Engr. Elmer Clemente';
+        doc.updatedAt = new Date().toISOString();
+        saveStorage();
+      }
+      return {
+        signDocument: {
+          changedEntities: doc ? ['Document', 'DashboardMetrics', `Document_${doc.id}`] : [],
+          document: doc,
+        },
+      };
+    }
+
+    case 'TransmitDocument': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const doc = liveDocuments.find((d) => d.id === input.documentId) ?? liveDocuments[0];
+      if (doc) {
+        doc.status = 'APPROVED';
+        doc.updatedAt = new Date().toISOString();
+        saveStorage();
+      }
+      return {
+        transmitDocument: {
+          changedEntities: doc ? ['Document', 'DashboardMetrics', `Document_${doc.id}`] : [],
+          document: doc,
+        },
+      };
+    }
+
+    case 'CloseRequest': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const req = liveRequests.find((r) => r.id === input.requestId) ?? liveRequests[0];
+      if (req) {
+        req.status = 'CLOSED';
+        saveStorage();
+      }
+      return {
+        closeRequest: {
+          changedEntities: ['Document', 'Request', 'DashboardMetrics'],
+          document: liveDocuments[0] ?? null,
+        },
+      };
+    }
+
+    case 'CreateEvent': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const v =
+        FALLBACK_VENUES.find((ven) => ven.id === input.venueId) ?? FALLBACK_VENUES[0];
+      const today = new Date().toISOString().slice(0, 10);
+      const newEvt: Event = {
+        id: `evt-${Date.now()}`,
+        title: (input.title as string) || 'Executive Municipal Session',
+        venueId: v.id,
+        venue: v,
+        department: (input.department as string) || 'Office of the Municipal Administrator',
+        eventDate: (input.eventDate as string) || today,
+        startTime: (input.startTime as string) || '09:00',
+        endTime: (input.endTime as string) || '11:00',
+        status: 'CONFIRMED',
+        involvesMayor: Boolean(input.involvesMayor),
+        involvesAdministrator: Boolean(input.involvesAdministrator),
+        notes: (input.notes as string) || null,
+        createdBy: 'Civil Service Officer',
+        attendees: [],
+        logs: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      liveEvents.unshift(newEvt);
+      saveStorage();
+      return {
+        createEvent: {
+          changedEntities: ['Event', 'DashboardMetrics', `Event_${newEvt.id}`],
+          event: newEvt,
+        },
+      };
+    }
+
+    case 'CancelEvent': {
+      const input = (variables?.input as Record<string, unknown>) ?? {};
+      const evt = liveEvents.find((e) => e.id === input.eventId) ?? liveEvents[0];
+      if (evt) {
+        evt.status = 'CANCELLED';
+        saveStorage();
+      }
+      return {
+        cancelEvent: {
+          changedEntities: evt ? ['Event', 'DashboardMetrics', `Event_${evt.id}`] : [],
+          event: evt,
+        },
+      };
+    }
+
+    case 'MarkNotificationRead':
+      return {
+        markNotificationRead: {
+          changedEntities: ['Notification'],
+          notification: null,
+        },
+      };
+
+    case 'MarkAllNotificationsRead':
+      return {
+        markAllNotificationsRead: {
+          changedEntities: ['Notification'],
+          count: 0,
+        },
+      };
+
+    default: {
+      const key = operationName.charAt(0).toLowerCase() + operationName.slice(1);
+      return {
+        [key]: {
+          changedEntities: [],
+          success: true,
+        },
+      };
+    }
   }
 }

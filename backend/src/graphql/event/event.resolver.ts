@@ -33,17 +33,33 @@ export const eventResolvers = {
   },
 
   Mutation: {
-    createEvent: (_p: unknown, { input }: MutationCreateEventArgs, ctx: GraphQLContext) =>
-      ctx.services.event.create(requireUser(ctx).sub, input),
+    createEvent: async (_p: unknown, { input }: MutationCreateEventArgs, ctx: GraphQLContext) => {
+      const event = await ctx.services.event.create(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Event', 'DashboardMetrics', `Event_${event.id}`],
+        event,
+      };
+    },
 
-    updateEvent: (_p: unknown, { input }: MutationUpdateEventArgs, ctx: GraphQLContext) =>
-      ctx.services.event.update(requireUser(ctx).sub, input),
+    updateEvent: async (_p: unknown, { input }: MutationUpdateEventArgs, ctx: GraphQLContext) => {
+      const event = await ctx.services.event.update(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Event', 'DashboardMetrics', `Event_${event.id}`],
+        event,
+      };
+    },
 
-    cancelEvent: (
+    cancelEvent: async (
       _p: unknown,
       { id, reason }: MutationCancelEventArgs,
       ctx: GraphQLContext,
-    ) => ctx.services.event.cancel(requireUser(ctx).sub, id, reason ?? null),
+    ) => {
+      const event = await ctx.services.event.cancel(requireUser(ctx).sub, id, reason ?? null);
+      return {
+        changedEntities: ['Event', 'DashboardMetrics', `Event_${event.id}`],
+        event,
+      };
+    },
   },
 
   Event: {

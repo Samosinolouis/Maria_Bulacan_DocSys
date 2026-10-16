@@ -1,10 +1,10 @@
 /**
- * MinIO Object Storage Adapter
+ * MinIO Object Storage Adapter with Persistent Local Disk Fallback
  *
- * Implements IObjectStoragePort against a MinIO server (S3-compatible) using
- * the official MinIO JavaScript client. This is THE object storage for the
- * system: every uploaded file (incoming scans, annexes, drafts, transmission
- * proofs, signed finals) lives here.
+ * Implements IObjectStoragePort against a MinIO server (S3-compatible) when
+ * available, and falls back gracefully to persistent local disk storage
+ * on Azure App Service (/home/site/attachments or ./storage/attachments)
+ * when MinIO is unavailable.
  *
  * [SOLID:SRP]  Upload/download/delete of objects only.
  * [SOLID:DIP]  Business layer depends on IObjectStoragePort, not this class.
@@ -14,11 +14,12 @@
  * NOTE: Storage is NOT transactional - never call this inside a Unit of Work.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import * as Minio from "minio";
 
 import { config } from "../../config/index.js";
 import { computeSha256 } from "../../utils/index.js";
-import { AppError, CommonErrorCode } from "../../errors/index.js";
 import type {
   IObjectStoragePort,
   UploadObjectInput,
@@ -26,16 +27,21 @@ import type {
   PresignOptions,
 } from "../../ports/storage.port.interface.js";
 
+export const LOCAL_STORAGE_DIR = process.env.STORAGE_PATH || (
+  process.env.HOME
+    ? path.join(process.env.HOME, "site", "attachments")
+    : path.join(process.cwd(), "storage", "attachments")
+);
+
 export class MinioObjectStorageAdapter implements IObjectStoragePort {
   private readonly client: Minio.Client;
   private readonly bucket: string;
-  /** Cached bucket-existence check; created lazily on the first upload. */
   private bucketReady: Promise<void> | null = null;
+  private minioAvailable: boolean | null = null;
 
   constructor() {
     this.bucket = config.minio.bucketName;
 
-    // MINIO_ENDPOINT may be a URL (http://host:port) or a bare host[:port].
     const rawEndpoint = config.minio.endpoint.includes("://")
       ? config.minio.endpoint
       : `http://${config.minio.endpoint}`;
@@ -52,7 +58,6 @@ export class MinioObjectStorageAdapter implements IObjectStoragePort {
       accessKey: config.minio.accessKey,
       secretKey: config.minio.secretKey,
       region: config.minio.region as Minio.Region,
-      // MinIO serves the S3 API on path-style addressing.
       pathStyle: true,
     });
   }
@@ -64,30 +69,56 @@ export class MinioObjectStorageAdapter implements IObjectStoragePort {
   async uploadObject(input: UploadObjectInput): Promise<StoredObject> {
     const bytes =
       input.body instanceof Uint8Array ? input.body : new Uint8Array(input.body);
-
-    // Server-computed tamper-evidence checksum (NFR-08).
     const checksum = computeSha256(bytes);
-    await this.ensureBucket();
 
-    try {
-      await this.client.putObject(
-        this.bucket,
-        input.key,
-        Buffer.from(bytes),
-        bytes.byteLength,
-        this.buildMetadata(input, checksum),
-      );
-    } catch (error) {
-      throw new AppError("Failed to store object in MinIO", {
-        status: 502,
-        code: CommonErrorCode.INTERNAL_ERROR,
-        details: { key: input.key, reason: (error as Error).message },
-      });
+    const isMinio = await this.checkMinioAvailability();
+    if (isMinio) {
+      try {
+        await this.ensureBucket();
+        await this.client.putObject(
+          this.bucket,
+          input.key,
+          Buffer.from(bytes),
+          bytes.byteLength,
+          this.buildMetadata(input, checksum),
+        );
+        return {
+          key: input.key,
+          bucketName: this.bucket,
+          sizeBytes: bytes.byteLength,
+          checksum,
+          uploadTimestamp: new Date(),
+        };
+      } catch (err) {
+        console.warn("MinIO putObject failed, falling back to local persistent storage:", err);
+      }
     }
+
+    // Persistent local filesystem storage fallback
+    const safeKey = path.normalize(input.key).replace(/^(\.\.[\/\\])+/, "");
+    const fullPath = path.join(LOCAL_STORAGE_DIR, safeKey);
+    const dir = path.dirname(fullPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(fullPath, Buffer.from(bytes));
+
+    const metaPath = `${fullPath}.meta.json`;
+    fs.writeFileSync(
+      metaPath,
+      JSON.stringify({
+        contentType: input.contentType,
+        originalName: input.originalName,
+        checksum,
+        sizeBytes: bytes.byteLength,
+        uploadTimestamp: new Date().toISOString(),
+        metadata: input.metadata ?? {},
+      }),
+    );
 
     return {
       key: input.key,
-      bucketName: this.bucket,
+      bucketName: "local-persistent",
       sizeBytes: bytes.byteLength,
       checksum,
       uploadTimestamp: new Date(),
@@ -98,64 +129,85 @@ export class MinioObjectStorageAdapter implements IObjectStoragePort {
     key: string,
     options?: PresignOptions,
   ): Promise<string> {
-    const expiresIn =
-      options?.expiresInSeconds ?? config.minio.presignExpirySeconds;
-
-    // Inline preview vs forced download (FR-34); the filename is sanitized so
-    // it can never break the Content-Disposition header.
-    const responseHeaders: Record<string, string> = {};
-    if (options?.fileName) {
-      const safeName = options.fileName.replace(/["\\\r\n]/g, "");
-      responseHeaders["response-content-disposition"] =
-        `${options.inline ? "inline" : "attachment"}; filename="${safeName}"`;
+    const isMinio = await this.checkMinioAvailability();
+    if (isMinio) {
+      try {
+        const expiresIn =
+          options?.expiresInSeconds ?? config.minio.presignExpirySeconds;
+        const responseHeaders: Record<string, string> = {};
+        if (options?.fileName) {
+          const safeName = options.fileName.replace(/["\\\r\n]/g, "");
+          responseHeaders["response-content-disposition"] =
+            `${options.inline ? "inline" : "attachment"}; filename="${safeName}"`;
+        }
+        return await this.client.presignedGetObject(
+          this.bucket,
+          key,
+          expiresIn,
+          responseHeaders,
+        );
+      } catch {
+        // Fall back to local file route
+      }
     }
 
-    try {
-      return await this.client.presignedGetObject(
-        this.bucket,
-        key,
-        expiresIn,
-        responseHeaders,
-      );
-    } catch (error) {
-      throw new AppError("Failed to presign MinIO download URL", {
-        status: 502,
-        code: CommonErrorCode.INTERNAL_ERROR,
-        details: { key, reason: (error as Error).message },
-      });
-    }
+    const base = config.app.baseUrl || "https://santamaria-docsys-api.azurewebsites.net";
+    const query = new URLSearchParams();
+    if (options?.fileName) query.set("filename", options.fileName);
+    if (options?.inline) query.set("inline", "true");
+    const qs = query.toString();
+    return `${base.replace(/\/+$/, "")}/uploads/files/${encodeURIComponent(key)}${qs ? `?${qs}` : ""}`;
   }
 
   async objectExists(key: string): Promise<boolean> {
+    const isMinio = await this.checkMinioAvailability();
+    if (isMinio) {
+      try {
+        await this.client.statObject(this.bucket, key);
+        return true;
+      } catch {
+        // Check local
+      }
+    }
+    const safeKey = path.normalize(key).replace(/^(\.\.[\/\\])+/, "");
+    const fullPath = path.join(LOCAL_STORAGE_DIR, safeKey);
+    return fs.existsSync(fullPath);
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    const isMinio = await this.checkMinioAvailability();
+    if (isMinio) {
+      try {
+        await this.client.removeObject(this.bucket, key);
+      } catch {
+        // Continue
+      }
+    }
+    const safeKey = path.normalize(key).replace(/^(\.\.[\/\\])+/, "");
+    const fullPath = path.join(LOCAL_STORAGE_DIR, safeKey);
+    if (fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+        const metaPath = `${fullPath}.meta.json`;
+        if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+      } catch {
+        // Ignore unlink error
+      }
+    }
+  }
+
+  private async checkMinioAvailability(): Promise<boolean> {
+    if (this.minioAvailable !== null) return this.minioAvailable;
     try {
-      await this.client.statObject(this.bucket, key);
+      await this.client.bucketExists(this.bucket);
+      this.minioAvailable = true;
       return true;
     } catch {
+      this.minioAvailable = false;
       return false;
     }
   }
 
-  async deleteObject(key: string): Promise<void> {
-    try {
-      await this.client.removeObject(this.bucket, key);
-    } catch (error) {
-      throw new AppError("Failed to delete object from MinIO", {
-        status: 502,
-        code: CommonErrorCode.INTERNAL_ERROR,
-        details: { key, reason: (error as Error).message },
-      });
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // Internals
-  // ------------------------------------------------------------------
-
-  /**
-   * Custom metadata travels as `x-amz-meta-*` headers: the original filename
-   * and the SHA-256 checksum are always stored (NFR-08), caller metadata is
-   * preserved alongside them.
-   */
   private buildMetadata(
     input: UploadObjectInput,
     checksum: string,
@@ -171,11 +223,6 @@ export class MinioObjectStorageAdapter implements IObjectStoragePort {
     return metaData;
   }
 
-  /**
-   * Ensure the bucket exists (cached, idempotent). The compose stack creates
-   * it up front via the `minio-init` job; this covers bare MinIO instances.
-   * A failed check is not cached, so the next upload retries.
-   */
   private ensureBucket(): Promise<void> {
     if (!this.bucketReady) {
       this.bucketReady = (async () => {
@@ -185,11 +232,7 @@ export class MinioObjectStorageAdapter implements IObjectStoragePort {
         }
       })().catch((error) => {
         this.bucketReady = null;
-        throw new AppError("Failed to ensure MinIO bucket exists", {
-          status: 502,
-          code: CommonErrorCode.INTERNAL_ERROR,
-          details: { bucket: this.bucket, reason: (error as Error).message },
-        });
+        throw error;
       });
     }
     return this.bucketReady;

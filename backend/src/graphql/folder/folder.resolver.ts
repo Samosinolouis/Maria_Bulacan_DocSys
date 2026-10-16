@@ -28,10 +28,16 @@ export const folderResolvers = {
   },
 
   Mutation: {
-    createFolder: (
+    createFolder: async (
       _p: unknown,
       { input }: MutationCreateFolderArgs,
       ctx: GraphQLContext,
-    ) => ctx.services.folder.create(requireUser(ctx).sub, input),
+    ) => {
+      const folder = await ctx.services.folder.create(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Folder', `Folder_${folder.id}`],
+        folder,
+      };
+    },
   },
 };
