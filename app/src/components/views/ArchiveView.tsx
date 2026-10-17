@@ -36,10 +36,11 @@ import type { Folder as FolderNode } from '@/services/contracts/report';
 import HighlightMatch from '@/components/HighlightMatch';
 
 /**
- * Requests that belong on the pending-archival desk: concluded (approved,
- * endorsed, denied) or already dispatched. Transmission (Step 5) is optional,
- * so a fulfilled request is filed without a dispatch record - the desk must not
- * wait for one.
+ * Requests that belong on the pending-archival desk (FR-30): concluded
+ * (approved, endorsed, denied) or already dispatched. Transmission (Step 5) is
+ * optional, so a fulfilled request is filed without a dispatch record - the desk
+ * must not wait for one. This is the same set the `DocumentService:Close` guard
+ * admits (`authz/policy.ts`), so every row offered here is closable.
  */
 const PENDING_ARCHIVAL_STATUSES = ['APPROVED', 'ENDORSED', 'DENIED', 'TRANSMITTED'] as const;
 

@@ -8,6 +8,9 @@
  *
  * Proves:
  *  A. a request can reach APPROVED with NO transmission record at all;
+ *  A2. a request that has NOT been decided yet (RECEIVED, then REVIEW) cannot
+ *     be closed at either layer (FR-30) - the gate the dossier's Close &
+ *     Archive button mirrors;
  *  B. the archive desk query (`requests(filter: { statusIn: [...] })`) returns
  *     it while the old single-status filter (`status: TRANSMITTED`) does not -
  *     the desk used to hide exactly this request;
@@ -153,6 +156,59 @@ async function main() {
     request.controlNo,
   );
 
+  /**
+   * `closeRequest` straight over the wire, past the client ABAC guard: the
+   * backend is the authority (NFR-07).
+   */
+  const rawClose = async (input: Record<string, unknown>) => {
+    return (await fetch('http://localhost:4000/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentToken}` },
+      body: JSON.stringify({
+        query:
+          'mutation RawClose($input: CloseRequestInput!) { closeRequest(input: $input) { changedEntities } }',
+        variables: { input },
+      }),
+    }).then((res) => res.json())) as {
+      errors?: Array<{ message: string; extensions?: { code?: string } }>;
+    };
+  };
+
+  console.log('== A2. an undecided request cannot be closed (FR-30) ==');
+  /** Both layers must refuse a close while the request is not decided. */
+  const refuseEarlyClose = async (stage: string) => {
+    const live = await bundle.registry.requests.getById(request.id);
+
+    let clientError: unknown = null;
+    try {
+      await bundle.registry.documents.close({
+        requestId: request.id,
+        finalAttachmentId: null,
+      });
+    } catch (error) {
+      clientError = error;
+    }
+    const refusal = isAppError(clientError) ? clientError : null;
+    check(
+      `the client guard refuses a close at ${stage} (status ${live?.status})`,
+      refusal?.code === 'FORBIDDEN' &&
+        refusal.message.includes('approved, endorsed, denied, or transmitted'),
+      refusal ? `${refusal.code}: ${refusal.message}` : String(clientError),
+    );
+
+    const raw = await rawClose({ requestId: request.id, finalAttachmentId: null });
+    check(
+      `the backend answers INVALID_STATE for the same close at ${stage} (FR-30)`,
+      raw.errors?.[0]?.extensions?.code === 'INVALID_STATE' &&
+        (raw.errors[0]?.message ?? '').includes('FR-30'),
+      raw.errors?.[0]
+        ? `${raw.errors[0].extensions?.code}: ${raw.errors[0].message}`
+        : JSON.stringify(raw),
+    );
+  };
+
+  await refuseEarlyClose('intake');
+
   const screened = await bundle.registry.requests.screen({
     requestId: request.id,
     passed: true,
@@ -167,6 +223,10 @@ async function main() {
   });
   const submitted = await bundle.registry.documents.submitForReview(document.id);
   check('documents.submitForReview -> UNDER_REVIEW', submitted.status === 'UNDER_REVIEW', submitted.status);
+
+  // The review stage is the one a clerk actually browses: the dossier must not
+  // offer Close & Archive here either.
+  await refuseEarlyClose('review');
 
   await asActor('administrator');
   const reviewed = await bundle.registry.documents.review({
@@ -263,7 +323,7 @@ async function main() {
 
   console.log('== D. a closed request refuses a second close ==');
   // D1. The client-side ABAC mirror refuses before the round trip (the policy
-  // guard is "status !== CLOSED").
+  // guard admits only decided requests, so CLOSED is outside it too).
   let refused: unknown = null;
   try {
     await bundle.registry.documents.close({
@@ -283,23 +343,11 @@ async function main() {
 
   // D2. The backend is the authority (NFR-07): the same mutation straight over
   // the wire, past the client guard, must be rejected too.
-  const raw = (await fetch('http://localhost:4000/graphql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentToken}` },
-    body: JSON.stringify({
-      query:
-        'mutation RawClose($input: CloseRequestInput!) { closeRequest(input: $input) { changedEntities } }',
-      variables: {
-        input: {
-          requestId: request.id,
-          finalAttachmentId: finalAttachment.id,
-          folderId: folder.id,
-        },
-      },
-    }),
-  }).then((res) => res.json())) as {
-    errors?: Array<{ message: string; extensions?: { code?: string } }>;
-  };
+  const raw = await rawClose({
+    requestId: request.id,
+    finalAttachmentId: finalAttachment.id,
+    folderId: folder.id,
+  });
   check(
     'the backend answers INVALID_STATE for the same call',
     raw.errors?.[0]?.extensions?.code === 'INVALID_STATE' &&

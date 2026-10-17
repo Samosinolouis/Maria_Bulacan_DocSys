@@ -454,8 +454,9 @@ export type Mutation = {
   cancelEvent: EventMutationPayload;
   /**
    * Close a request and file its output documents into the archive (FR-29..31).
-   * Transmission (Step 5) is optional: any open request can be closed once a
-   * signed final copy exists.
+   * Closable once the request has been decided - APPROVED, ENDORSED, DENIED, or
+   * TRANSMITTED (FR-30); transmission (Step 5) is optional, so a decided request
+   * closes without a dispatch record. A signed final copy is required (FR-29).
    */
   closeRequest: DocumentMutationPayload;
   createDocumentType: DocumentTypeMutationPayload;

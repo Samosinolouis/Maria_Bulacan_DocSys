@@ -85,18 +85,21 @@ export class AuthorizationEngine implements IAuthorizationEngine {
     }
 
     if (rule.guard) {
+      const reason =
+        (typeof rule.reason === 'function' ? rule.reason(ctx) : rule.reason) ??
+        'This action is not available for the selected record.';
       if (ctx.resource === null && rule.action !== 'DocumentService:Prepare') {
         return {
           allowed: false,
           code: 'ATTRIBUTE_DENIED',
-          reason: rule.reason ?? 'This action is not available for the selected record.',
+          reason,
         };
       }
       if (!rule.guard(ctx)) {
         return {
           allowed: false,
           code: 'ATTRIBUTE_DENIED',
-          reason: rule.reason ?? 'This action is not available for the selected record.',
+          reason,
         };
       }
     }

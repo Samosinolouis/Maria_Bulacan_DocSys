@@ -15,8 +15,12 @@ export interface ActionRule {
   action: ActionId;
   /** Return true to allow, false to deny. Omitted = grant check only. */
   guard?: (ctx: AuthzContext) => boolean;
-  /** User-safe reason shown when the guard denies. */
-  reason?: string;
+  /**
+   * User-safe reason shown when the guard denies. A function is evaluated with
+   * the same context as the guard, for rules whose guard has more than one
+   * denial cause (an already-closed request vs. one that has not concluded).
+   */
+  reason?: string | ((ctx: AuthzContext) => string);
   /** Extra grants required when a resource attribute condition holds. */
   requiresWhen?: (ctx: AuthzContext) => ActionId[];
   /**
@@ -34,6 +38,15 @@ function attr(ctx: AuthzContext, key: string): unknown {
 
 const STATUS_IN = (values: string[]) => (ctx: AuthzContext) =>
   values.includes(String(attr(ctx, 'status')));
+
+/**
+ * FR-30: the request statuses a request can be closed and filed from. The
+ * archive desk draws its Pending Archival rows from the same set
+ * (`PENDING_ARCHIVAL_STATUSES` in `components/views/ArchiveView.tsx`), so
+ * every row the desk offers is closable and no closable request is missing
+ * from it. Keep the two lists in step.
+ */
+const CLOSABLE_REQUEST_STATUSES = ['APPROVED', 'ENDORSED', 'DENIED', 'TRANSMITTED'] as const;
 
 const SPECIAL_VENUE_EXTRA = (ctx: AuthzContext): ActionId[] =>
   attr(ctx, 'venueSpecialUse') === true ? ['EventService:BookSpecialVenue'] : [];
@@ -74,13 +87,18 @@ export const POLICY: readonly ActionRule[] = [
     reason: 'Only approved, endorsed, or signed documents can be transmitted.',
   },
   {
-    // Step 6 is reachable from any open request status: transmission (Step 5)
-    // is optional, so a fulfilled request can be closed and filed without a
-    // dispatch record. The backend mirrors this (DocumentService.close) and
-    // still requires the signed final copy (FR-29).
+    // FR-30: a request is closable only once it has been DECIDED - approved,
+    // endorsed, denied, or transmitted. Transmission (Step 5) is optional, so a
+    // concluded request is closed and filed without a dispatch record; the
+    // signed final copy stays mandatory (FR-29) and a closed request stays
+    // read-only (FR-31). The backend mirrors this guard in
+    // `DocumentService.close` (NFR-07).
     action: 'DocumentService:Close',
-    guard: (ctx) => attr(ctx, 'status') !== 'CLOSED',
-    reason: 'This request is already closed and read-only.',
+    guard: STATUS_IN([...CLOSABLE_REQUEST_STATUSES]),
+    reason: (ctx) =>
+      attr(ctx, 'status') === 'CLOSED'
+        ? 'This request is already closed and read-only.'
+        : 'Only approved, endorsed, denied, or transmitted requests can be closed and archived.',
   },
   {
     action: 'EventService:Create',

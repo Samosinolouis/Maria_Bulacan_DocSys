@@ -141,7 +141,7 @@ export interface AuthzContext {
 export interface ActionRule {
   action: ActionId;
   guard?: (ctx: AuthzContext) => boolean;
-  reason?: string;
+  reason?: string | ((ctx: AuthzContext) => string);
   requiresWhen?: (ctx: AuthzContext) => ActionId[];
 }
 
@@ -157,7 +157,7 @@ The full DocSys rule set:
 | `DocumentService:Review` | `attr('status') === 'UNDER_REVIEW'` | "Only documents under review can be decided." | FR-21, FR-22 |
 | `DocumentService:Sign` | `attr('status')` in `APPROVED`, `ENDORSED` AND `attr('signatoryRequired') === true` | "This document is not awaiting a signature." | FR-25 |
 | `DocumentService:Transmit` | `attr('status')` in `APPROVED`, `ENDORSED`, `SIGNED` | "Only approved, endorsed, or signed documents can be transmitted." | FR-26..28 |
-| `DocumentService:Close` | `attr('status') !== 'CLOSED'` (transmission is optional, so any open status may close) | "This request is already closed and read-only." | FR-30 |
+| `DocumentService:Close` | `attr('status')` in `APPROVED`, `ENDORSED`, `DENIED`, `TRANSMITTED` (transmission is optional, but the request must have been decided) | "Only approved, endorsed, denied, or transmitted requests can be closed and archived." / "This request is already closed and read-only." | FR-30 |
 | `EventService:Update` | `attr('status') !== 'CANCELLED'` | "Cancelled events cannot be edited." | FR-41 |
 | `EventService:Cancel` | `attr('status') !== 'CANCELLED'` | "This event is already cancelled." | FR-41 |
 | `EventService:Create` | none; `requiresWhen: (ctx) => ctx.resource?.attributes.venueSpecialUse === true ? ['EventService:BookSpecialVenue'] : []` | (extra grant checked with the standard reason) | FR-41 |
@@ -173,6 +173,7 @@ Resource attribute convention: views and services pass the loaded entity's field
 ## Guard Semantics
 
 - A guard receives `AuthzContext` and returns a boolean.
+- `reason` is either the user-safe string shown on deny or a function of the same context, for a guard with more than one denial cause (a closed request vs. one that has not been decided yet).
 - `requiresWhen` returns extra actions that must also satisfy the grant check (wildcards apply). It exists for attribute-driven elevated permissions, such as special-use venues requiring `EventService:BookSpecialVenue`.
 - If an action has a rule with a `guard` but no `resource` was supplied, the decision denies with `ATTRIBUTE_DENIED` and the rule reason. Actions whose guard is optional (the `Prepare` submit path) express that by checking `ctx.resource !== null` inside the guard.
 - Guards are pure. No fetches, no clocks, no randomness.

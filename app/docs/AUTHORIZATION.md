@@ -184,7 +184,7 @@ The DocSys rules, grounded in the requirements:
 | `DocumentService:Review` | `document.status === 'UNDER_REVIEW'` | FR-21, FR-22 |
 | `DocumentService:Sign` | `document.status` in `APPROVED` or `ENDORSED`, and `document.signatoryRequired === true` | FR-25 |
 | `DocumentService:Transmit` | `document.status` in `APPROVED`, `ENDORSED`, or `SIGNED` | FR-26..28 |
-| `DocumentService:Close` | `request.status !== 'CLOSED'` (Step 5 transmission is optional) | FR-30 |
+| `DocumentService:Close` | `request.status` in `APPROVED`, `ENDORSED`, `DENIED`, or `TRANSMITTED` (Step 5 transmission is optional) | FR-30 |
 | `EventService:Create` | none; when `venue.specialUse === true`, the action additionally requires the `EventService:BookSpecialVenue` grant | FR-41 |
 | `EventService:Update` | `event.status !== 'CANCELLED'`; special-use venue condition applies as above | FR-41 |
 | `EventService:Cancel` | `event.status !== 'CANCELLED'` | FR-41 |
@@ -206,8 +206,9 @@ export interface ActionRule {
   action: ActionId;
   /** Return true to allow, false to deny. Omitted = grant check only. */
   guard?: (ctx: AuthzContext) => boolean;
-  /** User-safe reason shown when the guard denies. */
-  reason?: string;
+  /** User-safe reason shown when the guard denies. A function is evaluated
+   *  with the same context, for a guard with several denial causes. */
+  reason?: string | ((ctx: AuthzContext) => string);
   /** Extra grants required when a resource attribute condition holds. */
   requiresWhen?: (ctx: AuthzContext) => ActionId[];
 }

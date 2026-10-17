@@ -11,8 +11,9 @@
  * block for `position: fixed` and clip the overlay.
  *
  * Transmission (Step 5) is optional: the request can be closed and filed as
- * soon as a signed final copy exists, with no dispatch record. The signed final
- * copy itself stays mandatory (FR-29).
+ * soon as a signed final copy exists AND the request has been decided (FR-30:
+ * approved, endorsed, denied, or transmitted). The signed final copy itself
+ * stays mandatory (FR-29).
  */
 
 import React, { useMemo, useState } from 'react';

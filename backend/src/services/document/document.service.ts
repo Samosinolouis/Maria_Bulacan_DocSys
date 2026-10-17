@@ -12,7 +12,8 @@
  *              record the Mayor signature event
  * - FR-26..28  transmission records + request -> TRANSMITTED (Step 5 is
  *              optional: a fulfilled request can be closed without it)
- * - FR-29..31  close from any open status (signed final copy required);
+ * - FR-29..31  close once the request has been decided (approved / endorsed /
+ *              denied / transmitted) with the signed final copy required;
  *              read-only afterwards
  * - FR-39      exactly one immutable audit entry per state change, in-tx
  * - FR-47      workflow notifications (submitted-for-review, decisions)
@@ -69,11 +70,14 @@ import {
 const TRANSMITTABLE_STATUSES = ["APPROVED", "ENDORSED", "SIGNED"] as const;
 
 /**
- * Step 6 is reachable from ANY open request status: transmission (Step 5) is
- * optional, so a fulfilled request (approved / endorsed / denied) is closed and
- * filed without a dispatch record and only CLOSED is refused (FR-29..31). The
- * signed final copy stays mandatory (resolveFinalAttachment, FR-29).
+ * A request can be closed only from a DECIDED status (FR-30): approved,
+ * endorsed, denied, or transmitted. Transmission (Step 5) is optional, so a
+ * request that was approved / endorsed / denied closes and files without a
+ * dispatch record. The signed final copy stays mandatory
+ * (resolveFinalAttachment, FR-29) and a CLOSED request stays read-only
+ * (FR-31). The frontend mirrors this guard in `app/src/authz/policy.ts`.
  */
+const CLOSABLE_REQUEST_STATUSES = ["APPROVED", "ENDORSED", "DENIED", "TRANSMITTED"] as const;
 
 export class DocumentService implements IDocumentService {
   constructor(
@@ -541,6 +545,14 @@ export class DocumentService implements IDocumentService {
       if (request.status === "CLOSED") {
         throw new InvalidStateError(
           `Request ${request.controlNo} is already closed (read-only, FR-31).`,
+        );
+      }
+      // FR-30: only a decided request can be closed and filed. Fail closed, so
+      // a request still in intake / screening / preparation / review is refused
+      // even when the caller holds DocumentService:Close.
+      if (!(CLOSABLE_REQUEST_STATUSES as readonly string[]).includes(request.status)) {
+        throw new InvalidStateError(
+          `Request ${request.controlNo} is ${request.status}; only approved, endorsed, denied, or transmitted requests can be closed and archived (FR-30).`,
         );
       }
 
