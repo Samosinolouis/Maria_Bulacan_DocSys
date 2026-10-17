@@ -49,8 +49,8 @@ export function Form() {
                             className="space-y-4"
                         >
                             {!kcContext.usernameHidden && (
-                                <Field>
-                                    <FieldLabel htmlFor="username">
+                                <Field className="space-y-1.5">
+                                    <FieldLabel htmlFor="username" className="text-xs font-bold text-[#081E36]">
                                         {!kcContext.realm.loginWithEmailAllowed
                                             ? msg("username")
                                             : !kcContext.realm.registrationEmailAsUsername
@@ -63,6 +63,7 @@ export function Form() {
                                         defaultValue={kcContext.login.username ?? ""}
                                         name="username"
                                         autoFocus
+                                        className="border-[#CBD5E1] focus-visible:ring-1 focus-visible:ring-[#15803D] text-xs h-10"
                                         placeholder={showPlaceholder ?
                                             !kcContext.realm.loginWithEmailAllowed
                                                 ? msgStr("usernamePlaceholder")
@@ -97,15 +98,16 @@ export function Form() {
                                 </Field>
                             )}
 
-                            <Field>
-                                <FieldLabel htmlFor="password">
+                            <Field className="space-y-1.5">
+                                <FieldLabel htmlFor="password" className="text-xs font-bold text-[#081E36]">
                                     {msg("password")}
                                 </FieldLabel>
-                                <InputGroup>
+                                <InputGroup className="border-[#CBD5E1] focus-within:ring-1 focus-within:ring-[#15803D]">
                                     <InputGroupInput
                                         type="password"
                                         id="password"
                                         name="password"
+                                        className="text-xs h-10"
                                         autoComplete="current-password"
                                         placeholder={showPlaceholder ? msgStr("passwordPlaceholder") : undefined}
                                         aria-invalid={kcContext.messagesPerField.existsError(
@@ -146,6 +148,7 @@ export function Form() {
                                             <Checkbox
                                                 id="rememberMe"
                                                 name="rememberMe"
+                                                className="data-[state=checked]:bg-[#15803D] data-[state=checked]:border-[#15803D]"
                                                 defaultChecked={
                                                     !!kcContext.login.rememberMe
                                                 }
@@ -153,7 +156,7 @@ export function Form() {
 
                                             <Label
                                                 htmlFor="rememberMe"
-                                                className="text-sm font-medium cursor-pointer"
+                                                className="text-xs font-medium text-[#475569] cursor-pointer"
                                             >
                                                 {msg("rememberMe")}
                                             </Label>
@@ -161,13 +164,13 @@ export function Form() {
                                     )}
                                 <div className="link-style ">
                                     {kcContext.realm.resetPasswordAllowed && (
-                                        <span className=" underline-offset-4 hover:underline">
+                                        <span className="text-[#15803D] underline-offset-4 hover:underline">
                                             <a
                                                 href={
                                                     kcContext.url.loginResetCredentialsUrl
                                                 }
                                             >
-                                                <Label className="text-sm font-medium cursor-pointer">
+                                                <Label className="text-xs font-medium text-[#15803D] cursor-pointer">
                                                     {msg("doForgotPassword")}
                                                 </Label>
                                             </a>
@@ -186,7 +189,7 @@ export function Form() {
 
                                 <Button
                                     disabled={isLoginButtonDisabled}
-                                    className="w-full"
+                                    className="w-full bg-[#15803D] hover:bg-[#166534] text-white font-bold text-xs py-2.5 rounded shadow cursor-pointer transition-colors"
                                     name="login"
                                     id="kc-login"
                                     type="submit"

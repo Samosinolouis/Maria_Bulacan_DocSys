@@ -55,17 +55,28 @@ export function TemplateContent(props: TemplateContentProps) {
         auth.showUsername &&
         !auth.showResetCredentials
     ) ? (
-        <h1 className="text-xl">{headerNode}</h1>
+        <div className="border-b border-[#E2E8F0] pb-4 mb-4">
+            <span className="font-mono text-[10px] font-bold text-[#15803D] uppercase tracking-wider block">
+                Official Identity Provider (SSO)
+            </span>
+            <h2 className="text-xl sm:text-2xl font-bold text-[#081E36] tracking-tight mt-1">
+                {headerNode}
+            </h2>
+            <p className="text-xs text-[#64748B] mt-1.5 leading-relaxed font-normal">
+                Municipal single sign-on access to the Santa Maria Document System statutory docket.
+            </p>
+        </div>
     ) : (
-        <div id="kc-username" className="flex items-center justify-between gap-2">
-            <div className="flex gap-4 items-center">
-                <User className="text-muted-foreground size-6" />
-
-                <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-normal text-muted-foreground">
+        <div id="kc-username" className="flex items-center justify-between gap-2 p-3 bg-[#F8FAFC] rounded border border-[#CBD5E1] mb-4">
+            <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-full bg-[#15803D]/10 text-[#15803D] flex items-center justify-center">
+                    <User className="size-4" />
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-[#64748B]">
                         {msgStr("attemptedUsernameLoggingInAs")}
                     </span>
-                    <span className="font-semibold text-lg" id="kc-attempted-username">
+                    <span className="font-semibold text-sm text-[#081E36]" id="kc-attempted-username">
                         {auth.attemptedUsername}
                     </span>
                 </div>
@@ -93,8 +104,8 @@ export function TemplateContent(props: TemplateContentProps) {
     );
 
     return (
-        <Card className={cardClassName}>
-            <CardHeader>
+        <Card className={cn("border-0 shadow-none bg-transparent", cardClassName)}>
+            <CardHeader className="p-0 pb-2">
                 <div
                     className={cn(
                         "flex flex-col items-center justify-center gap-3",
@@ -122,12 +133,12 @@ export function TemplateContent(props: TemplateContentProps) {
                     </div>
                 </div>
 
-                <CardTitle>
+                <CardTitle className="font-normal">
                     {displayRequiredFields ? (
                         <div className="flex items-center justify-between gap-2">
                             <div>{titleNode}</div>
                             <div>
-                                <span className="subtitle">
+                                <span className="subtitle text-[11px] text-[#64748B]">
                                     <span className="text-red-500" aria-hidden="true">
                                         *
                                     </span>
@@ -141,7 +152,7 @@ export function TemplateContent(props: TemplateContentProps) {
                 </CardTitle>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="p-0 pt-2">
                 <div id="kc-content" className="flex flex-col gap-4">
                     {displayMessage &&
                         message !== undefined &&

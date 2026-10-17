@@ -5,62 +5,26 @@
  * $ npx keycloakify own --path "login/components/Template/layouts/TwoColumnLayout.tsx" --revert
  */
 
-import { useI18n } from "@/login/i18n";
-import { useKcContext } from "@/login/KcContext";
-import { kcSanitize } from "@keycloakify/login-ui/kcSanitize";
 import type { ReactNode } from "react";
-import shape from "../../../assets/img/shape.svg";
-import { TemplateTopBar } from "../TemplateTopBar";
+import { GovMasthead, GovFooter, InstitutionalPanel } from "../../DocsysChrome";
 
 export function TwoColumnLayout(props: { content: ReactNode; logoUrl: string }) {
-    const { content, logoUrl } = props;
-
-    const { kcContext } = useKcContext();
-
-    const { msg } = useI18n();
+    const { content } = props;
 
     return (
-        <div className="grid min-h-svh lg:grid-cols-2 ">
-            <div className="relative flex min-h-screen flex-col pb-6 lg:min-h-0 lg:p-6 lg:pt-10">
-                <TemplateTopBar />
+        <div className="min-h-screen bg-[#F1F5F9] text-[#0F172A] flex flex-col justify-between selection:bg-[#15803D] selection:text-white">
+            <GovMasthead />
 
-                <div className="flex flex-1 items-center justify-center lg:items-center p-6 md:p-10">
-                    <main className="w-full max-w-xl">{content}</main>
-                </div>
-            </div>
-
-            <div className="bg-slate-950  relative hidden h-full overflow-hidden lg:block dark:bg-card">
-                <div className="flex h-full items-center justify-center pt-20">
-                    <div className="absolute right-0 top-0 w-full max-w-62.5 xl:max-w-112.5">
-                        <img src={shape} alt="" />
-                    </div>
-                    <div className="absolute bottom-0 left-0 w-full max-w-62.5 rotate-180 xl:max-w-112.5">
-                        <img src={shape} alt="" />
-                    </div>
-
-                    <div className="relative z-10 flex max-w-xs flex-col items-center justify-center text-center">
-                        <div className="mb-4 flex items-center gap-3">
-                            <img src={logoUrl} alt="Logo" className="size-14" />
-                            {kcContext.realm.displayNameHtml ? (
-                                <span
-                                    className="text-xl text-white"
-                                    dangerouslySetInnerHTML={{
-                                        __html: kcSanitize(
-                                            kcContext.realm.displayNameHtml
-                                        )
-                                    }}
-                                />
-                            ) : (
-                                <span className="text-xl text-white">
-                                    {kcContext.realm.displayName || kcContext.realm.name}
-                                </span>
-                            )}
-                        </div>
-
-                        <p className="text-sm text-white/70">{msg("welcomeMessage")}</p>
+            <main className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+                <div className="w-full max-w-4xl bg-white rounded-xl shadow-2xl border border-[#CBD5E1] overflow-hidden flex flex-col md:flex-row">
+                    <InstitutionalPanel />
+                    <div className="w-full md:w-7/12 p-6 sm:p-8 bg-white flex flex-col justify-center">
+                        {content}
                     </div>
                 </div>
-            </div>
+            </main>
+
+            <GovFooter />
         </div>
     );
 }

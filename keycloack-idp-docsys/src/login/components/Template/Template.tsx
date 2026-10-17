@@ -106,8 +106,8 @@ export function Template(props: TemplateProps) {
                             {...props}
                             logoWhiteUrl={logoWhiteUrl}
                             logoDarkUrl={logoDarkUrl}
-                            brandingVisibilityClassName="lg:hidden"
-                            cardClassName="border-0 shadow-none bg-transparent md:border md:bg-card md:shadow-sm"
+                            brandingVisibilityClassName="hidden"
+                            cardClassName="border-0 shadow-none bg-transparent"
                         />
                     }
                     logoUrl={logoDarkUrl}
