@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Search, X, Loader2, RotateCcw, Send, Upload, Paperclip } from 'lucide-react';
 import { useApp } from '@/providers/AppProvider';
 import { useToast } from '@/providers/ToastProvider';
-import { useAttachmentService, useAsyncAction, useCan, useDispatchQueue } from '@/hooks';
+import { useAttachmentService, useAsyncAction, useCan, useDispatchQueue, useRequests } from '@/hooks';
 import { DOCUMENT_STATUS_META, resolveStatusMeta } from '@/lib/constants';
 import HighlightMatch from '@/components/HighlightMatch';
 import Portal from '@/components/Portal';
@@ -106,9 +106,27 @@ export default function TransmitView() {
   const approvedQuery = useDispatchQueue({ first: 100, filter: { status: 'APPROVED' } });
   const endorsedQuery = useDispatchQueue({ first: 100, filter: { status: 'ENDORSED' } });
   const signedQuery = useDispatchQueue({ first: 100, filter: { status: 'SIGNED' } });
+  const closedQuery = useRequests({ first: 100, filter: { status: 'CLOSED' } });
 
-  const isLoading = approvedQuery.isLoading || endorsedQuery.isLoading || signedQuery.isLoading;
-  const error = approvedQuery.error ?? endorsedQuery.error ?? signedQuery.error;
+  const isLoading =
+    approvedQuery.isLoading ||
+    endorsedQuery.isLoading ||
+    signedQuery.isLoading ||
+    closedQuery.isLoading;
+  const error =
+    approvedQuery.error ??
+    endorsedQuery.error ??
+    signedQuery.error ??
+    closedQuery.error;
+
+  const closedRequestIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const edge of closedQuery.data?.edges ?? []) {
+      if (edge.node.id) set.add(edge.node.id);
+      if (edge.node.controlNo) set.add(edge.node.controlNo);
+    }
+    return set;
+  }, [closedQuery.data]);
 
   const rows = useMemo(() => {
     const seen = new Set<string>();
@@ -120,13 +138,17 @@ export default function TransmitView() {
         // transmission is recorded, and the request then waits for archival
         // under Archive > Pending Archival (Step 6).
         if ((edge.node.transmissions ?? []).length > 0) continue;
+        // Do not display documents that are already closed/filed in an archive folder
+        if (edge.node.folderId) continue;
+        // Do not display documents whose underlying request is already closed
+        if (edge.node.requestId && closedRequestIds.has(edge.node.requestId)) continue;
         if (seen.has(edge.node.id)) continue;
         seen.add(edge.node.id);
         merged.push(edge.node);
       }
     }
     return merged;
-  }, [approvedQuery.data, endorsedQuery.data, signedQuery.data]);
+  }, [approvedQuery.data, endorsedQuery.data, signedQuery.data, closedRequestIds]);
 
   const filteredRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -142,6 +164,7 @@ export default function TransmitView() {
     approvedQuery.refresh();
     endorsedQuery.refresh();
     signedQuery.refresh();
+    closedQuery.refresh();
   };
 
   // Inline transmission panel state.

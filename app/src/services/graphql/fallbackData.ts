@@ -409,21 +409,35 @@ export function getFallbackGraphQLData(
       return { documentTypes: FALLBACK_DOCUMENT_TYPES };
 
     case 'Documents': {
+      let docs = liveDocuments;
+      const f = variables?.filter as Record<string, unknown> | undefined;
+      if (f?.status) docs = docs.filter((d) => d.status === f.status);
+      if (f?.folderId) docs = docs.filter((d) => d.folderId === f.folderId);
+      if (f?.requestId) docs = docs.filter((d) => d.requestId === f.requestId);
       return {
         documents: {
-          edges: liveDocuments.map((d) => ({ node: d, cursor: d.id })),
+          edges: docs.map((d) => ({ node: d, cursor: d.id })),
           pageInfo: {
             hasNextPage: false,
             hasPreviousPage: false,
-            startCursor: liveDocuments[0]?.id ?? null,
-            endCursor: liveDocuments[liveDocuments.length - 1]?.id ?? null,
+            startCursor: docs[0]?.id ?? null,
+            endCursor: docs[docs.length - 1]?.id ?? null,
           },
         },
       };
     }
 
     case 'DocumentsForDispatch': {
-      const dispatchable = liveDocuments.filter((d) => d.status === 'APPROVED' || d.status === 'SIGNED');
+      const closedReqIds = new Set(liveRequests.filter((r) => r.status === 'CLOSED').map((r) => r.id));
+      const closedReqControlNos = new Set(liveRequests.filter((r) => r.status === 'CLOSED').map((r) => r.controlNo));
+      const dispatchable = liveDocuments.filter((d) => {
+        const isApprovedOrSigned = d.status === 'APPROVED' || d.status === 'SIGNED' || d.status === 'ENDORSED';
+        if (!isApprovedOrSigned) return false;
+        if (d.folderId) return false;
+        if (d.transmissions && d.transmissions.length > 0) return false;
+        if (d.requestId && (closedReqIds.has(d.requestId) || closedReqControlNos.has(d.requestId))) return false;
+        return true;
+      });
       return {
         documentsForDispatch: {
           edges: dispatchable.map((d) => ({ node: d, cursor: d.id })),
@@ -733,6 +747,12 @@ export function getFallbackGraphQLData(
       const req = liveRequests.find((r) => r.id === input.requestId) ?? liveRequests[0];
       if (req) {
         req.status = 'CLOSED';
+        const folderId = (input.folderId as string) || 'archive-default';
+        liveDocuments.forEach((doc) => {
+          if (doc.requestId === req.id || doc.requestId === req.controlNo) {
+            doc.folderId = folderId;
+          }
+        });
         saveStorage();
       }
       return {
