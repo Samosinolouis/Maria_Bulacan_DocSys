@@ -357,10 +357,13 @@ export default function DashboardView() {
                 <tr>
                   <td colSpan={7} className="text-center py-10 text-[#64748B] text-xs">
                     <div className="space-y-1.5 max-w-sm mx-auto">
-                      <div className="font-bold text-sm text-[#081E36]">No Matching Dockets Found</div>
+                      <div className="font-bold text-sm text-[#081E36]">
+                        {searchQuery ? 'No Matching Dockets Found' : 'Clean Registry — No Dockets Logged'}
+                      </div>
                       <p className="text-[11px] leading-relaxed">
-                        No recent municipal records match the active search terms. Try clearing the
-                        search query.
+                        {searchQuery
+                          ? 'No recent municipal records match the active search terms. Try clearing the search query.'
+                          : 'The official docket ledger is clean and ready. Click "Encode Request" or "Prepare Document" in the sidebar to begin municipal recordkeeping.'}
                       </p>
                       {searchQuery && (
                         <button

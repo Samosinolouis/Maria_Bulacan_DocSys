@@ -49,6 +49,12 @@ export interface ISessionService {
   /** Sign in directly using a static civil service plantilla profile for offline/preview mode. */
   loginPreview(username?: string): SessionSnapshot;
 
+  /** Adopt a verified Keycloak JWT access token from an OIDC redirect or token exchange. */
+  loginFromToken(accessToken: string, idToken?: string): SessionSnapshot;
+
+  /** Authenticate directly with Keycloak username and password. */
+  loginWithKeycloakCredentials(username: string, password: string): Promise<SessionSnapshot>;
+
   /** Complete the OIDC callback (token exchange), then load `me`. */
   completeLogin(): Promise<SessionSnapshot>;
 

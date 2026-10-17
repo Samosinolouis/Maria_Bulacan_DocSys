@@ -6,7 +6,7 @@ import pg from '../app/node_modules/pg/lib/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const KC_HOST = process.env.KC_HOST || 'http://santamaria-docsys-idp.southeastasia.azurecontainer.io:8080';
+const KC_HOST = process.env.KC_HOST || 'https://santamaria-docsys-idp.azurewebsites.net';
 const KC_ADMIN = process.env.KC_ADMIN || 'admin';
 const KC_ADMIN_PW = process.env.KC_ADMIN_PW || 'SantaMariaAdmin2026!';
 const REALM = 'docsys';

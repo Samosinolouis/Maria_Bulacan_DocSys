@@ -31,10 +31,20 @@ export const notificationResolvers = {
   },
 
   Mutation: {
-    markNotificationRead: (_p: unknown, { id }: MutationMarkNotificationReadArgs, ctx: GraphQLContext) =>
-      ctx.services.notification.markRead(requireUser(ctx).sub, id),
+    markNotificationRead: async (_p: unknown, { id }: MutationMarkNotificationReadArgs, ctx: GraphQLContext) => {
+      const notification = await ctx.services.notification.markRead(requireUser(ctx).sub, id);
+      return {
+        changedEntities: ['Notification'],
+        notification,
+      };
+    },
 
-    markAllNotificationsRead: (_p: unknown, _a: unknown, ctx: GraphQLContext) =>
-      ctx.services.notification.markAllRead(requireUser(ctx).sub),
+    markAllNotificationsRead: async (_p: unknown, _a: unknown, ctx: GraphQLContext) => {
+      const count = await ctx.services.notification.markAllRead(requireUser(ctx).sub);
+      return {
+        changedEntities: ['Notification'],
+        count,
+      };
+    },
   },
 };

@@ -14,6 +14,8 @@
  *   POST /uploads/documents/:documentId (file, kind=DRAFT|SIGNED_FINAL|TRANSMISSION_PROOF)
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 
@@ -21,6 +23,7 @@ import { config } from "../config/index.js";
 import { AuthenticationError, ValidationError } from "../errors/index.js";
 import type { IAttachmentService } from "../interfaces/attachment.service.interface.js";
 import type { IIdentityProviderPort } from "../ports/idp.port.interface.js";
+import { LOCAL_STORAGE_DIR } from "../adapters/storage/minio-storage.adapter.js";
 
 const REQUEST_ATTACHMENT_KINDS = ["INCOMING_LETTER", "ANNEX"] as const;
 const DOCUMENT_ATTACHMENT_KINDS = ["DRAFT", "SIGNED_FINAL", "TRANSMISSION_PROOF"] as const;
@@ -147,5 +150,45 @@ export async function registerUploadRoutes(
     });
 
     return reply.status(201).send(attachment);
+  });
+
+  // GET /uploads/files/* (stream stored file with content disposition)
+  app.get("/uploads/files/*", async (request, reply) => {
+    const rawKey = (request.params as { "*": string })["*"];
+    if (!rawKey) return reply.status(404).send({ message: "File key required" });
+    const key = decodeURIComponent(rawKey);
+
+    const safeKey = path.normalize(key).replace(/^(\.\.[\/\\])+/, "");
+    const filePath = path.join(LOCAL_STORAGE_DIR, safeKey);
+
+    if (!fs.existsSync(filePath)) {
+      return reply.status(404).send({ message: "Attachment file not found" });
+    }
+
+    const { filename, inline } = request.query as { filename?: string; inline?: string };
+    let contentType = "application/octet-stream";
+    let originalName = filename || path.basename(filePath);
+
+    const metaPath = `${filePath}.meta.json`;
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+        if (meta.contentType) contentType = meta.contentType;
+        if (!filename && meta.originalName) originalName = meta.originalName;
+      } catch {
+        // ignore JSON parse error
+      }
+    }
+
+    const safeName = originalName.replace(/["\\\r\n]/g, "");
+    const disposition = inline === "true" ? "inline" : `attachment; filename="${safeName}"`;
+    const stat = fs.statSync(filePath);
+
+    return reply
+      .header("Content-Type", contentType)
+      .header("Content-Disposition", disposition)
+      .header("Content-Length", stat.size)
+      .header("Cache-Control", "private, max-age=86400")
+      .send(fs.createReadStream(filePath));
   });
 }

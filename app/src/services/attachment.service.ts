@@ -27,10 +27,11 @@ import {
 } from './cache/helpers';
 import { ATTACHMENT_OPS } from './graphql/attachment.ops';
 
-const UPLOADS_BASE = (process.env.NEXT_PUBLIC_UPLOADS_URL ?? 'http://localhost:4000').replace(
-  /\/+$/,
-  '',
-);
+const rawUploadsUrl =
+  process.env.NEXT_PUBLIC_UPLOADS_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'https://santamaria-docsys-api.azurewebsites.net';
+const UPLOADS_BASE = rawUploadsUrl.replace(/\/graphql\/?$/, '').replace(/\/+$/, '');
 
 export class AttachmentService implements IAttachmentService {
   constructor(
@@ -158,10 +159,12 @@ export class AttachmentService implements IAttachmentService {
         body,
       });
     } catch (cause) {
+      console.error('[AttachmentService] Multipart upload fetch error:', cause, 'Target URL:', url);
       throw new AppError('NETWORK', 'The upload service is unreachable.', cause);
     }
     if (!res.ok) {
       const detail = (await res.json().catch(() => null)) as { message?: string } | null;
+      console.error('[AttachmentService] Upload response error status:', res.status, detail);
       throw new AppError(
         res.status === 401 || res.status === 403 ? 'FORBIDDEN' : 'VALIDATION',
         detail?.message ?? `Upload failed (HTTP ${res.status}).`,

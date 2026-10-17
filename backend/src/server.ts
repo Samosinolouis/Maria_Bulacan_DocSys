@@ -114,10 +114,53 @@ const venueService = new VenueService(db, telemetryPort);
 export async function buildServer() {
   const app = Fastify({ logger: true });
 
-  // Browser access from the frontend origins (dev: http://localhost:3000).
+  // Browser access from frontend origins (Azure SWA domains, App Service, and dev localhost)
   await app.register(cors, {
-    origin: config.cors.origins,
-    methods: ["GET", "POST", "OPTIONS"],
+    origin: (origin, cb) => {
+      // Allow non-browser requests (mobile, curl, SSR)
+      if (!origin) return cb(null, true);
+
+      try {
+        const parsed = new URL(origin);
+        // Allow all local dev hosts
+        if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+          return cb(null, true);
+        }
+        // Allow all Azure Static Web Apps (*.azurestaticapps.net)
+        if (parsed.hostname.endsWith(".azurestaticapps.net")) {
+          return cb(null, true);
+        }
+        // Allow all Azure App Service domains (*.azurewebsites.net)
+        if (parsed.hostname.endsWith(".azurewebsites.net")) {
+          return cb(null, true);
+        }
+        // Check explicitly allowed origins from config
+        if (config.cors.origins.some((allowed) => allowed === origin || allowed === "*")) {
+          return cb(null, true);
+        }
+      } catch {
+        // Fallback for non-standard origin headers
+      }
+
+      if (config.cors.origins.includes("*")) {
+        return cb(null, true);
+      }
+
+      return cb(new Error(`Origin ${origin} not allowed by CORS`), false);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: [
+      "Origin",
+      "X-Requested-With",
+      "Content-Type",
+      "Accept",
+      "Authorization",
+      "Range",
+      "Cache-Control",
+      "Pragma",
+    ],
+    exposedHeaders: ["Content-Disposition", "Content-Length", "Content-Type"],
+    credentials: true,
   });
 
   await app.register(mercurius, {

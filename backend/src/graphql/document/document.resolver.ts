@@ -42,26 +42,57 @@ export const documentResolvers = {
   },
 
   Mutation: {
-    prepareDocument: (_p: unknown, { input }: MutationPrepareDocumentArgs, ctx: GraphQLContext) =>
-      ctx.services.document.prepare(requireUser(ctx).sub, input),
+    prepareDocument: async (_p: unknown, { input }: MutationPrepareDocumentArgs, ctx: GraphQLContext) => {
+      const document = await ctx.services.document.prepare(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Document', 'DashboardMetrics', `Document_${document.id}`],
+        document,
+      };
+    },
 
-    submitDocumentForReview: (
+    submitDocumentForReview: async (
       _p: unknown,
       { id }: MutationSubmitDocumentForReviewArgs,
       ctx: GraphQLContext,
-    ) => ctx.services.document.submitForReview(requireUser(ctx).sub, id),
+    ) => {
+      const document = await ctx.services.document.submitForReview(requireUser(ctx).sub, id);
+      return {
+        changedEntities: ['Document', 'Request', 'DashboardMetrics', `Document_${document.id}`],
+        document,
+      };
+    },
 
-    reviewDocument: (_p: unknown, { input }: MutationReviewDocumentArgs, ctx: GraphQLContext) =>
-      ctx.services.document.review(requireUser(ctx).sub, input),
+    reviewDocument: async (_p: unknown, { input }: MutationReviewDocumentArgs, ctx: GraphQLContext) => {
+      const document = await ctx.services.document.review(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Document', 'Request', 'DashboardMetrics', `Document_${document.id}`],
+        document,
+      };
+    },
 
-    signDocument: (_p: unknown, { input }: MutationSignDocumentArgs, ctx: GraphQLContext) =>
-      ctx.services.document.sign(requireUser(ctx).sub, input),
+    signDocument: async (_p: unknown, { input }: MutationSignDocumentArgs, ctx: GraphQLContext) => {
+      const document = await ctx.services.document.sign(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Document', 'Request', 'DashboardMetrics', `Document_${document.id}`],
+        document,
+      };
+    },
 
-    transmitDocument: (_p: unknown, { input }: MutationTransmitDocumentArgs, ctx: GraphQLContext) =>
-      ctx.services.document.transmit(requireUser(ctx).sub, input),
+    transmitDocument: async (_p: unknown, { input }: MutationTransmitDocumentArgs, ctx: GraphQLContext) => {
+      const document = await ctx.services.document.transmit(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Document', 'Request', 'DashboardMetrics', `Document_${document.id}`],
+        document,
+      };
+    },
 
-    closeRequest: (_p: unknown, { input }: MutationCloseRequestArgs, ctx: GraphQLContext) =>
-      ctx.services.document.close(requireUser(ctx).sub, input),
+    closeRequest: async (_p: unknown, { input }: MutationCloseRequestArgs, ctx: GraphQLContext) => {
+      const document = await ctx.services.document.close(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Document', 'Request', 'Folder', 'DashboardMetrics'],
+        document,
+      };
+    },
   },
 
   Document: {

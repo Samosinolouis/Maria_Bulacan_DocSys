@@ -37,14 +37,29 @@ export const requestResolvers = {
   },
 
   Mutation: {
-    encodeRequest: (_p: unknown, { input }: MutationEncodeRequestArgs, ctx: GraphQLContext) =>
-      ctx.services.request.encode(requireUser(ctx).sub, input),
+    encodeRequest: async (_p: unknown, { input }: MutationEncodeRequestArgs, ctx: GraphQLContext) => {
+      const request = await ctx.services.request.encode(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Request', 'DashboardMetrics', `Request_${request.id}`],
+        request,
+      };
+    },
 
-    screenRequest: (_p: unknown, { input }: MutationScreenRequestArgs, ctx: GraphQLContext) =>
-      ctx.services.request.screen(requireUser(ctx).sub, input),
+    screenRequest: async (_p: unknown, { input }: MutationScreenRequestArgs, ctx: GraphQLContext) => {
+      const request = await ctx.services.request.screen(requireUser(ctx).sub, input);
+      return {
+        changedEntities: ['Request', 'DashboardMetrics', `Request_${request.id}`],
+        request,
+      };
+    },
 
-    resubmitRequest: (_p: unknown, { id }: MutationResubmitRequestArgs, ctx: GraphQLContext) =>
-      ctx.services.request.resubmit(requireUser(ctx).sub, id),
+    resubmitRequest: async (_p: unknown, { id }: MutationResubmitRequestArgs, ctx: GraphQLContext) => {
+      const request = await ctx.services.request.resubmit(requireUser(ctx).sub, id);
+      return {
+        changedEntities: ['Request', 'DashboardMetrics', `Request_${request.id}`],
+        request,
+      };
+    },
   },
 
   Request: {

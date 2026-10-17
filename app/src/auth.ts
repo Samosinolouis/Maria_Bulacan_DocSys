@@ -17,7 +17,9 @@
 import NextAuth from 'next-auth';
 import Keycloak from 'next-auth/providers/keycloak';
 
-const KC_BASE = (process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
+const KC_BASE = (
+  process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'https://santamaria-docsys-idp.azurewebsites.net'
+).replace(/\/+$/, '');
 const KC_REALM = process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? 'docsys';
 
 const ISSUER = process.env.AUTH_KEYCLOAK_ISSUER ?? `${KC_BASE}/realms/${KC_REALM}`;

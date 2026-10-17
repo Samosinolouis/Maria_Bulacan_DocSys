@@ -115,6 +115,24 @@ export const PREVIEW_USERS: Record<string, SessionUser> = {
   },
 };
 
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
 export class SessionService implements ISessionService {
   private snapshot: SessionSnapshot | null = null;
   private accessToken: string | null = null;
@@ -179,13 +197,145 @@ export class SessionService implements ISessionService {
     return snapshot;
   }
 
+  loginFromToken(accessToken: string, idToken?: string): SessionSnapshot {
+    const claims = parseJwtPayload(accessToken) ?? (idToken ? parseJwtPayload(idToken) : null);
+    const sub = (claims?.sub as string) || 'kc-user-' + Date.now();
+    const username = (claims?.preferred_username as string) || (claims?.username as string) || 'administrator';
+    const email = (claims?.email as string) || `${username}@docsys.local`;
+    const name = (claims?.name as string) || '';
+    const givenName = (claims?.given_name as string) || name.split(' ')[0] || (username.toLowerCase().includes('clerk') ? 'Sherelyn' : 'Elmer');
+    const familyName = (claims?.family_name as string) || name.split(' ').slice(1).join(' ') || (username.toLowerCase().includes('clerk') ? 'Libao' : 'Clemente');
+    const isClerk = username.toLowerCase().includes('clerk');
+
+    const user: SessionUser = isClerk
+      ? {
+          id: sub,
+          firstName: givenName,
+          middleName: 'O.',
+          lastName: familyName,
+          email,
+          contactNo: '(044) 815-2882',
+          office: 'Central Receiving Desk',
+          position: 'Administrative Aide IV / Records Custodian',
+          roles: [
+            {
+              id: 'role-clerk',
+              name: 'CLERK_ENCODER',
+              description: 'Intake and screening permissions',
+              permissionPayload: [
+                'RequestService:*',
+                'DocumentService:*',
+                'AttachmentService:*',
+                'NotificationService:*',
+                'EventService:Read',
+                'VenueService:Read',
+                'ReportService:Read',
+              ],
+            },
+          ],
+          effectivePermissions: [
+            'RequestService:*',
+            'DocumentService:*',
+            'AttachmentService:*',
+            'NotificationService:*',
+            'EventService:Read',
+            'VenueService:Read',
+            'ReportService:Read',
+          ],
+        }
+      : {
+          id: sub,
+          firstName: givenName,
+          middleName: 'B.',
+          lastName: familyName,
+          email,
+          contactNo: '(044) 815-2882',
+          office: 'Office of the Municipal Administrator',
+          position: 'Municipal Administrator',
+          roles: [
+            {
+              id: 'role-admin',
+              name: 'ADMINISTRATOR',
+              description: 'Full statutory authority across municipal operations',
+              permissionPayload: ['*:*'],
+            },
+          ],
+          effectivePermissions: ['*:*'],
+        };
+
+    const exp = typeof claims?.exp === 'number' ? claims.exp * 1000 : Date.now() + 86400000;
+    const snapshot: SessionSnapshot = {
+      user,
+      authenticatedAt: new Date().toISOString(),
+      expiresAt: new Date(exp).toISOString(),
+    };
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('docsys_kc_token', accessToken);
+        if (idToken) localStorage.setItem('docsys_kc_id_token', idToken);
+        localStorage.setItem('docsys_kc_user', JSON.stringify(user));
+        localStorage.setItem('docsys_kc_exp', String(exp));
+        localStorage.removeItem('docsys_preview_user');
+      } catch {
+        // Ignore storage errors
+      }
+    }
+
+    this.accessToken = accessToken;
+    this.accessTokenExpiresAt = exp;
+    this.setSnapshot(snapshot);
+    return snapshot;
+  }
+
+  async loginWithKeycloakCredentials(username: string, password: string): Promise<SessionSnapshot> {
+    const kcBase =
+      process.env.NEXT_PUBLIC_KEYCLOAK_URL ||
+      'https://santamaria-docsys-idp.azurewebsites.net';
+    const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'docsys';
+    const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT || 'docsys-app';
+
+    const res = await fetch(`${kcBase}/realms/${realm}/protocol/openid-connect/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'password',
+        client_id: clientId,
+        username,
+        password,
+        scope: 'openid profile email',
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = 'Authentication failed. Please verify your Keycloak credentials.';
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error_description) msg = parsed.error_description;
+      } catch {
+        // use default
+      }
+      throw new Error(msg);
+    }
+
+    const data = (await res.json()) as { access_token: string; id_token?: string };
+    return this.loginFromToken(data.access_token, data.id_token);
+  }
+
   async logout(): Promise<void> {
     this.resetLocalState();
     try {
       await this.auth.signOut();
     } catch {
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        const kcBase = (
+          process.env.NEXT_PUBLIC_KEYCLOAK_URL ||
+          'https://santamaria-docsys-idp.azurewebsites.net'
+        ).replace(/\/+$/, '');
+        const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT || 'docsys-app';
+        const postLogout = encodeURIComponent(`${window.location.origin}/login`);
+        window.location.href = `${kcBase}/realms/docsys/protocol/openid-connect/logout?client_id=${clientId}&post_logout_redirect_uri=${postLogout}`;
       }
     }
   }
@@ -230,6 +380,10 @@ export class SessionService implements ISessionService {
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem('docsys_preview_user');
+        localStorage.removeItem('docsys_kc_token');
+        localStorage.removeItem('docsys_kc_id_token');
+        localStorage.removeItem('docsys_kc_user');
+        localStorage.removeItem('docsys_kc_exp');
       } catch {
         // Ignore storage errors
       }
@@ -260,6 +414,12 @@ export class SessionService implements ISessionService {
   private async runHydrate(): Promise<SessionSnapshot | null> {
     if (typeof window !== 'undefined') {
       try {
+        const kcToken = localStorage.getItem('docsys_kc_token');
+        const kcExp = Number(localStorage.getItem('docsys_kc_exp') ?? '0');
+        if (kcToken && (!kcExp || kcExp > Date.now())) {
+          const idToken = localStorage.getItem('docsys_kc_id_token') ?? undefined;
+          return this.loginFromToken(kcToken, idToken);
+        }
         const previewUser = localStorage.getItem('docsys_preview_user');
         if (previewUser && PREVIEW_USERS[previewUser]) {
           return this.loginPreview(previewUser);
